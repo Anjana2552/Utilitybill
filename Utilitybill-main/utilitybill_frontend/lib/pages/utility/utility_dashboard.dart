@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../config/api_config.dart';
+import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'utility_payment.dart';
+import 'utility_profile.dart';
+import 'generate_bill.dart';
 import '../../widgets/theme_header.dart';
+import 'utility_users_list.dart';
 
 class UtilityDashboard extends StatefulWidget {
   const UtilityDashboard({super.key});
@@ -13,6 +21,12 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
   String _fullName = '';
   String _email = '';
   bool _isLoading = true;
+  int _currentIndex = 0;
+  String _providerName = '';
+  int _providerUserCount = 0;
+  String _username = '';
+  // Users list moved to a dedicated page; keep only count here.
+  
 
   @override
   void initState() {
@@ -22,11 +36,26 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _fullName = prefs.getString('full_name') ?? 'Utility Authority';
-      _email = prefs.getString('user_email') ?? '';
-      _isLoading = false;
-    });
+    _fullName = prefs.getString('full_name') ?? 'Utility Authority';
+    _email = prefs.getString('user_email') ?? '';
+    _username = prefs.getString('user_username') ?? '';
+
+    // Detect provider name from username suffix
+    final uLower = _username.toLowerCase();
+    if (uLower.endsWith('kseb')) {
+      _providerName = 'kseb';
+      // Fire and forget; don't block initial UI
+      // ignore: unawaited_futures
+      _fetchProviderUserCount('kseb');
+      // ignore: unawaited_futures
+      // Users list is shown on a separate page on tap.
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _handleLogout() async {
@@ -36,76 +65,152 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
     Navigator.pushReplacementNamed(context, '/');
   }
 
+  Future<void> _fetchProviderUserCount(String provider) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/user-utility/count/?provider_name=${Uri.encodeQueryComponent(provider)}');
+      final resp = await http.get(uri, headers: { 'Content-Type': 'application/json' });
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final count = int.tryParse(data['count']?.toString() ?? '0') ?? 0;
+        if (!mounted) return;
+        setState(() {
+          _providerUserCount = count;
+        });
+      }
+    } catch (_) {}
+  }
+
+  // Removed inline users fetching; handled in UtilityUsersListPage
+
   @override
   Widget build(BuildContext context) {
+    final pages = <Widget>[
+      _HomeSection(
+        onReadyLogout: _handleLogout,
+        onTapCount: _openProviderUsers,
+        fullNameGetter: () => _fullName,
+        emailGetter: () => _email,
+        isLoadingGetter: () => _isLoading,
+        providerNameGetter: () => _providerName,
+        providerUserCountGetter: () => _providerUserCount,
+      ),
+      const GenerateBillPage(),
+      const UtilityPaymentPage(),
+      const UtilityProfilePage(),
+    ];
+    final items = <Widget>[
+      const Icon(Icons.home, size: 28, color: Colors.white),
+      const Icon(Icons.receipt_long, size: 28, color: Colors.white),
+      const Icon(Icons.payment, size: 28, color: Colors.white),
+      const Icon(Icons.person, size: 28, color: Colors.white),
+    ];
+
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF7FD9CE),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _handleLogout,
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header Section with Theme
-                  Stack(
-                    children: [
-                      const BlueGreenHeader(
-                        height: 200,
-                      ),
-                      Positioned(
-                        top: 20,
-                        left: 24,
-                        right: 24,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Welcome,',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.white70,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _fullName,
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _email,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+      appBar: null,
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            children: [
+              const DrawerHeader(
+                decoration: BoxDecoration(color: Color(0xFF7FD9CE)),
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                   ),
-                  
-
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.home),
+                title: const Text('Home'),
+                selected: _currentIndex == 0,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  setState(() => _currentIndex = 0);
+                },
+              ),
+              ExpansionTile(
+                leading: const Icon(Icons.receipt_long),
+                title: const Text('Bills'),
+                childrenPadding: const EdgeInsets.only(left: 24),
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.playlist_add_outlined),
+                    title: const Text('Generate Bill'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const GenerateBillPage()),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.visibility_outlined),
+                    title: const Text('View Bill'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('View Bill coming soon')),
+                      );
+                    },
+                  ),
                 ],
               ),
-            ),
+              ListTile(
+                leading: const Icon(Icons.payment),
+                title: const Text('Payment'),
+                selected: _currentIndex == 2,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  setState(() => _currentIndex = 2);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_none),
+                title: const Text('Notifications'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Notifications coming soon')),
+                  );
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Logout'),
+                onTap: _handleLogout,
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: pages,
+      ),
+      bottomNavigationBar: CurvedNavigationBar(
+        items: items,
+        index: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        color: const Color(0xFF34B3A0),
+        buttonBackgroundColor: const Color(0xFF34B3A0),
+        backgroundColor: Colors.transparent,
+        animationCurve: Curves.easeInOut,
+        animationDuration: const Duration(milliseconds: 300),
+        height: 60,
+      ),
+    );
+  }
+
+  void _openProviderUsers() {
+    if (_providerName.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UtilityUsersListPage(providerName: _providerName),
+      ),
     );
   }
 
@@ -221,3 +326,156 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
     );
   }
 }
+
+class _HomeSection extends StatelessWidget {
+  final Future<void> Function() onReadyLogout;
+  final VoidCallback onTapCount;
+  final String Function() fullNameGetter;
+  final String Function() emailGetter;
+  final bool Function() isLoadingGetter;
+  final String Function() providerNameGetter;
+  final int Function() providerUserCountGetter;
+
+  const _HomeSection({
+    required this.onReadyLogout,
+    required this.onTapCount,
+    required this.fullNameGetter,
+    required this.emailGetter,
+    required this.isLoadingGetter,
+    required this.providerNameGetter,
+    required this.providerUserCountGetter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoading = isLoadingGetter();
+    final fullName = fullNameGetter();
+    final email = emailGetter();
+    final providerName = providerNameGetter();
+    final providerUserCount = providerUserCountGetter();
+
+    return CurvedHeaderPage(
+      title: 'Welcome back, ${fullName.isNotEmpty ? fullName : ''}',
+      headerHeight: 220,
+      titleAlignment: HeaderTitleAlignment.left,
+      leading: Builder(
+        builder: (ctx) => IconButton(
+          icon: const Icon(Icons.menu, color: Colors.white),
+          onPressed: () => Scaffold.of(ctx).openDrawer(),
+          tooltip: 'Menu',
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 24),
+          if (isLoading)
+            const Center(child: CircularProgressIndicator())
+          else ...[
+            if (providerName.toLowerCase() == 'kseb') ...[
+              _DashboardPill(
+                title: 'Total Users',
+                subtitle: 'KSEB',
+                badgeText: providerUserCount.toString(),
+                onTap: onTapCount,
+              ),
+            ],
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardPill extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final String badgeText;
+  final VoidCallback? onTap;
+
+  const _DashboardPill({
+    required this.title,
+    this.subtitle,
+    required this.badgeText,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF34B3A0), Color(0xFF7FD9CE)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  badgeText,
+                  style: const TextStyle(
+                    color: Color(0xFF34B3A0),
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

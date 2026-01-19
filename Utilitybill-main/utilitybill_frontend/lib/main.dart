@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'pages/landing_page.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
-import 'pages/home_page.dart';
+import 'pages/users/home_page.dart';
 import 'pages/admin/admin_dashboard.dart';
 import 'pages/utility/utility_dashboard.dart';
 
