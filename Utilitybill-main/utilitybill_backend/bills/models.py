@@ -127,3 +127,36 @@ class UtilityBill(models.Model):
 
     def __str__(self):
         return f"{self.bill_id} - {self.utility_type}"
+
+
+class Payment(models.Model):
+    """Represents a payment made against a UtilityBill."""
+    METHOD_CHOICES = (
+        ('cash', 'Cash'),
+        ('credit_card', 'Credit Card'),
+        ('debit_card', 'Debit Card'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('online', 'Online Payment'),
+        ('other', 'Other'),
+    )
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    )
+
+    bill = models.ForeignKey(UtilityBill, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_date = models.DateTimeField(auto_now_add=True)
+    payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='online')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    class Meta:
+        db_table = 'payment'
+        indexes = [
+            models.Index(fields=['payment_method']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Payment for {self.bill.bill_id} - {self.amount}"

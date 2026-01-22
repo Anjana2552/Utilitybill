@@ -5,11 +5,12 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
-from .models import UserProfile, UserUtility, GeneratedBill, UtilityBill
+from .models import UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment
 from .serializers import (
     UserSerializer, UserProfileSerializer, 
     UserRegistrationSerializer, UserUtilitySerializer, GeneratedBillSerializer, UtilityBillSerializer
 )
+from rest_framework.authtoken.models import Token
 
 
 @api_view(['POST'])
@@ -42,9 +43,11 @@ def login_user(request):
     user = authenticate(username=username, password=password)
     if user:
         login(request, user)
+        token, _ = Token.objects.get_or_create(user=user)
         return Response({
             'user': UserSerializer(user).data,
             'profile': UserProfileSerializer(user.profile).data,
+            'token': token.key,
             'message': 'Login successful'
         }, status=status.HTTP_200_OK)
     
@@ -148,7 +151,18 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return UserProfile.objects.filter(user=self.request.user)
+        user = self.request.user
+        # Admins and superusers can view all profiles
+        try:
+            if getattr(user, 'is_superuser', False) or (
+                hasattr(user, 'profile') and user.profile.role == 'admin'
+            ):
+                return UserProfile.objects.all().order_by('-created_at')
+        except Exception:
+            # Fallback to self-only if any profile access issue
+            pass
+        # Regular users: only their own profile
+        return UserProfile.objects.filter(user=user).order_by('-created_at')
 
 
 @api_view(['POST'])
@@ -250,6 +264,7 @@ def list_generated_bills(request):
     gas_id = request.GET.get('gas_consumer_id')
     wifi_id = request.GET.get('wifi_consumer_id')
     dth_id = request.GET.get('dth_subscriber_id')
+    provider_name = request.GET.get('provider_name')
     if utility_type:
         qs = qs.filter(utility_type__iexact=utility_type)
     if consumer_number:
@@ -262,6 +277,8 @@ def list_generated_bills(request):
         qs = qs.filter(wifi_consumer_id=wifi_id)
     if dth_id:
         qs = qs.filter(dth_subscriber_id=dth_id)
+    if provider_name:
+        qs = qs.filter(provider_name__iexact=provider_name)
     data = GeneratedBillSerializer(qs, many=True).data
     return Response({'results': data}, status=status.HTTP_200_OK)
 
@@ -328,9 +345,154 @@ def list_utility_bills(request):
     qs = UtilityBill.objects.all().order_by('-created_at')
     utility_type = request.GET.get('utility_type')
     bill_id = request.GET.get('bill_id')
+    consumer_id = request.GET.get('consumer_id')
     if utility_type:
         qs = qs.filter(utility_type__iexact=utility_type)
     if bill_id:
         qs = qs.filter(bill_id=bill_id)
+    if consumer_id:
+        qs = qs.filter(consumer_id=consumer_id)
     data = UtilityBillSerializer(qs, many=True).data
     return Response({'results': data}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # Consider switching to IsAuthenticated with admin role check
+@csrf_exempt
+def set_user_active(request):
+    """Set a user's is_active flag.
+
+    Body: { user_id?: int, username?: str, is_active: bool }
+    """
+    user_id = request.data.get('user_id')
+    username = request.data.get('username')
+    is_active = request.data.get('is_active')
+    if is_active is None:
+        return Response({'error': 'is_active is required'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        if user_id:
+            user = User.objects.get(id=user_id)
+        elif username:
+            user = User.objects.get(username=username)
+        else:
+            return Response({'error': 'user_id or username is required'}, status=status.HTTP_400_BAD_REQUEST)
+        user.is_active = bool(is_active)
+        user.save(update_fields=['is_active'])
+        return Response({'message': 'User activation updated', 'user': UserSerializer(user).data}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])  # Consider switching to IsAuthenticated with admin role check
+@csrf_exempt
+def delete_user_account(request):
+    """Delete a user account (and cascade delete the profile). Query params or body can provide user_id or username."""
+    user_id = request.data.get('user_id') or request.GET.get('user_id')
+    username = request.data.get('username') or request.GET.get('username')
+    try:
+        if user_id:
+            user = User.objects.get(id=int(user_id))
+        elif username:
+            user = User.objects.get(username=username)
+        else:
+            return Response({'error': 'user_id or username is required'}, status=status.HTTP_400_BAD_REQUEST)
+        user.delete()
+        return Response({'message': 'User deleted'}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # Consider switching to IsAuthenticated later
+@csrf_exempt
+def add_payment(request):
+    """Create a payment record for a given bill_id and amount."""
+    bill_id = (request.data.get('bill_id') or '').strip()
+    amount = request.data.get('amount')
+    method = (request.data.get('payment_method') or 'online').strip()
+
+    if not bill_id or amount is None:
+        return Response({'error': 'bill_id and amount are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        bill = UtilityBill.objects.get(bill_id=bill_id)
+    except UtilityBill.DoesNotExist:
+        return Response({'error': 'Bill not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        payment = Payment.objects.create(bill=bill, amount=amount, payment_method=method)
+        return Response({'message': 'Payment recorded', 'payment': {
+            'id': payment.id,
+            'bill_id': bill.bill_id,
+            'amount': str(payment.amount),
+            'payment_method': payment.payment_method,
+            'payment_date': payment.payment_date,
+            'status': payment.status,
+        }}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({'error': f'Failed to record payment: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])  # Consider switching to IsAuthenticated later
+@csrf_exempt
+def list_payments(request):
+    """List all payments with optional filter by bill_id."""
+    bill_id = request.GET.get('bill_id')
+    status_filter = request.GET.get('status')
+    qs = Payment.objects.all().order_by('-payment_date')
+    if bill_id:
+        qs = qs.filter(bill__bill_id=bill_id)
+    if status_filter:
+        qs = qs.filter(status__iexact=status_filter)
+    # Simple serializer output
+    results = [{
+        'id': p.id,
+        'bill_id': p.bill.bill_id,
+        'amount': str(p.amount),
+        'payment_method': p.payment_method,
+        'payment_date': p.payment_date,
+        'status': p.status,
+    } for p in qs]
+    return Response({'results': results}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # Consider switching to IsAuthenticated later
+@csrf_exempt
+def approve_payment(request):
+    """Mark a payment as approved.
+
+    Body: { id: int }
+    """
+    pid = request.data.get('id')
+    if not pid:
+        return Response({'error': 'id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        payment = Payment.objects.get(id=int(pid))
+    except (Payment.DoesNotExist, ValueError):
+        return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
+    payment.status = 'approved'
+    payment.save(update_fields=['status'])
+    return Response({'message': 'Payment approved', 'id': payment.id, 'status': payment.status}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # Consider switching to IsAuthenticated later
+@csrf_exempt
+def reject_payment(request):
+    """Mark a payment as rejected.
+
+    Body: { id: int }
+    """
+    pid = request.data.get('id')
+    if not pid:
+        return Response({'error': 'id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        payment = Payment.objects.get(id=int(pid))
+    except (Payment.DoesNotExist, ValueError):
+        return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
+    payment.status = 'rejected'
+    payment.save(update_fields=['status'])
+    return Response({'message': 'Payment rejected', 'id': payment.id, 'status': payment.status}, status=status.HTTP_200_OK)

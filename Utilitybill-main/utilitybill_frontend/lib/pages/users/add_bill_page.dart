@@ -41,10 +41,7 @@ class _AddBillPageState extends State<AddBillPage> {
     'DTH',
     'Others',
   ];
-  static const List<String> _connectionTypeOptions = [
-    'Domestic',
-    'Commercial',
-  ];
+  static const List<String> _connectionTypeOptions = ['Domestic', 'Commercial'];
   static const List<String> _wifiPlanOptions = [
     '50 Mbps',
     '100 Mbps',
@@ -82,21 +79,32 @@ class _AddBillPageState extends State<AddBillPage> {
       _selectedUtility = utilityType;
       _providerNameCtrl.text = (init?['provider_name'] as String?) ?? '';
       _houseNumberCtrl.text = (init?['meter_number'] as String?) ?? '';
-      _connectionType = (init?['connection_type'] as String?) ?? _connectionType;
+      _connectionType =
+          (init?['connection_type'] as String?) ?? _connectionType;
       _wifiSelectedPlan = (init?['plan_name'] as String?) ?? _wifiSelectedPlan;
     });
     // Fill conditional fields
-    _consumerNumberCtrl.text = (init?['consumer_number'] as String?) ?? _consumerNumberCtrl.text;
-    _waterConnectNumberCtrl.text = (init?['water_connection_number'] as String?) ?? _waterConnectNumberCtrl.text;
-    _gasConsumerIdCtrl.text = (init?['gas_connection_number'] as String?) ?? _gasConsumerIdCtrl.text;
-    _wifiCustomerIdCtrl.text = (init?['wifi_consumer_id'] as String?) ?? _wifiCustomerIdCtrl.text;
-    _dthSubscriberIdCtrl.text = (init?['dth_subscriber_id'] as String?) ?? _dthSubscriberIdCtrl.text;
-    _dthPackageNameCtrl.text = (init?['plan_name'] as String?) ?? _dthPackageNameCtrl.text;
+    _consumerNumberCtrl.text =
+        (init?['consumer_number'] as String?) ?? _consumerNumberCtrl.text;
+    _waterConnectNumberCtrl.text =
+        (init?['water_connection_number'] as String?) ??
+        _waterConnectNumberCtrl.text;
+    _gasConsumerIdCtrl.text =
+        (init?['gas_connection_number'] as String?) ?? _gasConsumerIdCtrl.text;
+    _wifiCustomerIdCtrl.text =
+        (init?['wifi_consumer_id'] as String?) ?? _wifiCustomerIdCtrl.text;
+    _dthSubscriberIdCtrl.text =
+        (init?['dth_subscriber_id'] as String?) ?? _dthSubscriberIdCtrl.text;
+    _dthPackageNameCtrl.text =
+        (init?['plan_name'] as String?) ?? _dthPackageNameCtrl.text;
   }
 
   Future<void> _loadUserName() async {
     final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('full_name') ?? prefs.getString('user_username') ?? 'User';
+    final name =
+        prefs.getString('full_name') ??
+        prefs.getString('user_username') ??
+        'User';
     if (!mounted) return;
     setState(() => _userName = name);
   }
@@ -121,7 +129,9 @@ class _AddBillPageState extends State<AddBillPage> {
     if (_selectedUtility == 'Water') {
       if (_waterConnectNumberCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter the water connection number')),
+          const SnackBar(
+            content: Text('Please enter the water connection number'),
+          ),
         );
         return;
       }
@@ -143,14 +153,16 @@ class _AddBillPageState extends State<AddBillPage> {
     if (_selectedUtility == 'Wifi') {
       if (_wifiCustomerIdCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter the customer/account number')),
+          const SnackBar(
+            content: Text('Please enter the customer/account number'),
+          ),
         );
         return;
       }
       if (_wifiSelectedPlan == null || _wifiSelectedPlan!.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a plan')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Please select a plan')));
         return;
       }
     }
@@ -211,13 +223,27 @@ class _AddBillPageState extends State<AddBillPage> {
           ? Uri.parse('${ApiConfig.baseUrl}/user-utility/${_editingId!}/')
           : Uri.parse('${ApiConfig.baseUrl}/user-utility/add/');
       final resp = await (isEditing
-          ? http.put(uri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload))
-          : http.post(uri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload)));
-      final ok = isEditing ? (resp.statusCode == 200) : (resp.statusCode == 201);
+          ? http.put(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(payload),
+            )
+          : http.post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(payload),
+            ));
+      final ok = isEditing
+          ? (resp.statusCode == 200)
+          : (resp.statusCode == 201);
       if (ok) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEditing ? 'Successfully updated' : 'Successfully added')),
+          SnackBar(
+            content: Text(
+              isEditing ? 'Successfully updated' : 'Successfully added',
+            ),
+          ),
         );
         Navigator.pop(context, {'id': _editingId, ...payload});
       } else {
@@ -228,15 +254,15 @@ class _AddBillPageState extends State<AddBillPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    Widget _pill(Widget child) {
+    Widget pill(Widget child) {
       return Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -253,15 +279,19 @@ class _AddBillPageState extends State<AddBillPage> {
       );
     }
 
-    InputDecoration _pillDecoration(String hint, IconData icon) {
+    InputDecoration pillDecoration(String hint, IconData icon) {
       return InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.black54),
         prefixIcon: Icon(icon, color: Colors.black54),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 16,
+        ),
         border: InputBorder.none,
       );
     }
+
     return Scaffold(
       body: CurvedHeaderPage(
         title: 'Add Bill',
@@ -277,10 +307,13 @@ class _AddBillPageState extends State<AddBillPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _pill(
+              pill(
                 DropdownButtonFormField<String>(
-                  value: _selectedUtility,
-                  decoration: _pillDecoration('Utility Type', Icons.category_outlined),
+                  initialValue: _selectedUtility,
+                  decoration: pillDecoration(
+                    'Utility Type',
+                    Icons.category_outlined,
+                  ),
                   items: _utilityOptions
                       .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                       .toList(),
@@ -289,17 +322,23 @@ class _AddBillPageState extends State<AddBillPage> {
                     _connectionType = null;
                     _wifiSelectedPlan = null;
                   }),
-                  validator: (v) => (v == null || v.isEmpty) ? 'Please select a utility type' : null,
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Please select a utility type'
+                      : null,
                 ),
               ),
               const SizedBox(height: 12),
               if (_selectedUtility == 'Others')
-                _pill(
+                pill(
                   TextFormField(
                     controller: _customUtilityCtrl,
-                    decoration: _pillDecoration('Specify Utility Type', Icons.edit_outlined),
+                    decoration: pillDecoration(
+                      'Specify Utility Type',
+                      Icons.edit_outlined,
+                    ),
                     validator: (v) {
-                      if (_selectedUtility == 'Others' && (v == null || v.trim().isEmpty)) {
+                      if (_selectedUtility == 'Others' &&
+                          (v == null || v.trim().isEmpty)) {
                         return 'Please specify the utility type';
                       }
                       return null;
@@ -308,19 +347,25 @@ class _AddBillPageState extends State<AddBillPage> {
                 ),
               if (_selectedUtility == 'Others') const SizedBox(height: 12),
               if (_selectedUtility == 'Electricity')
-                _pill(
+                pill(
                   TextFormField(
                     controller: _consumerNumberCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: _pillDecoration('Consumer Number', Icons.numbers),
+                    decoration: pillDecoration(
+                      'Consumer Number',
+                      Icons.numbers,
+                    ),
                   ),
                 ),
               if (_selectedUtility == 'Electricity') const SizedBox(height: 12),
               if (_selectedUtility == 'Electricity')
-                _pill(
+                pill(
                   DropdownButtonFormField<String>(
-                    value: _connectionType,
-                    decoration: _pillDecoration('Connection Type', Icons.power_outlined),
+                    initialValue: _connectionType,
+                    decoration: pillDecoration(
+                      'Connection Type',
+                      Icons.power_outlined,
+                    ),
                     items: _connectionTypeOptions
                         .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                         .toList(),
@@ -329,19 +374,25 @@ class _AddBillPageState extends State<AddBillPage> {
                 ),
               if (_selectedUtility == 'Electricity') const SizedBox(height: 12),
               if (_selectedUtility == 'Water')
-                _pill(
+                pill(
                   TextFormField(
                     controller: _waterConnectNumberCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: _pillDecoration('Water Connection Number', Icons.water_drop_outlined),
+                    decoration: pillDecoration(
+                      'Water Connection Number',
+                      Icons.water_drop_outlined,
+                    ),
                   ),
                 ),
               if (_selectedUtility == 'Water') const SizedBox(height: 12),
               if (_selectedUtility == 'Water')
-                _pill(
+                pill(
                   DropdownButtonFormField<String>(
-                    value: _connectionType,
-                    decoration: _pillDecoration('Connection Type', Icons.power_outlined),
+                    initialValue: _connectionType,
+                    decoration: pillDecoration(
+                      'Connection Type',
+                      Icons.power_outlined,
+                    ),
                     items: _connectionTypeOptions
                         .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                         .toList(),
@@ -350,26 +401,32 @@ class _AddBillPageState extends State<AddBillPage> {
                 ),
               if (_selectedUtility == 'Water') const SizedBox(height: 12),
               if (_selectedUtility == 'Gas')
-                _pill(
+                pill(
                   TextFormField(
                     controller: _gasConsumerIdCtrl,
-                    decoration: _pillDecoration('Gas Consumer ID', Icons.local_gas_station_outlined),
+                    decoration: pillDecoration(
+                      'Gas Consumer ID',
+                      Icons.local_gas_station_outlined,
+                    ),
                   ),
                 ),
               if (_selectedUtility == 'Gas') const SizedBox(height: 12),
               if (_selectedUtility == 'Wifi')
-                _pill(
+                pill(
                   TextFormField(
                     controller: _wifiCustomerIdCtrl,
-                    decoration: _pillDecoration('Customer ID / Account Number', Icons.perm_identity),
+                    decoration: pillDecoration(
+                      'Customer ID / Account Number',
+                      Icons.perm_identity,
+                    ),
                   ),
                 ),
               if (_selectedUtility == 'Wifi') const SizedBox(height: 12),
               if (_selectedUtility == 'Wifi')
-                _pill(
+                pill(
                   DropdownButtonFormField<String>(
-                    value: _wifiSelectedPlan,
-                    decoration: _pillDecoration('Selected Plan', Icons.wifi),
+                    initialValue: _wifiSelectedPlan,
+                    decoration: pillDecoration('Selected Plan', Icons.wifi),
                     items: _wifiPlanOptions
                         .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                         .toList(),
@@ -378,32 +435,44 @@ class _AddBillPageState extends State<AddBillPage> {
                 ),
               if (_selectedUtility == 'Wifi') const SizedBox(height: 12),
               if (_selectedUtility == 'DTH')
-                _pill(
+                pill(
                   TextFormField(
                     controller: _dthSubscriberIdCtrl,
-                    decoration: _pillDecoration('Subscriber ID', Icons.subscriptions_outlined),
+                    decoration: pillDecoration(
+                      'Subscriber ID',
+                      Icons.subscriptions_outlined,
+                    ),
                   ),
                 ),
               if (_selectedUtility == 'DTH') const SizedBox(height: 12),
               if (_selectedUtility == 'DTH')
-                _pill(
+                pill(
                   TextFormField(
                     controller: _dthPackageNameCtrl,
-                    decoration: _pillDecoration('Package Name', Icons.tv_outlined),
+                    decoration: pillDecoration(
+                      'Package Name',
+                      Icons.tv_outlined,
+                    ),
                   ),
                 ),
               if (_selectedUtility == 'DTH') const SizedBox(height: 12),
-              _pill(
+              pill(
                 TextFormField(
                   controller: _houseNumberCtrl,
-                  decoration: _pillDecoration('House Number', Icons.home_outlined),
+                  decoration: pillDecoration(
+                    'House Number',
+                    Icons.home_outlined,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
-              _pill(
+              pill(
                 TextFormField(
                   controller: _providerNameCtrl,
-                  decoration: _pillDecoration('Provider Name', Icons.business_outlined),
+                  decoration: pillDecoration(
+                    'Provider Name',
+                    Icons.business_outlined,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),

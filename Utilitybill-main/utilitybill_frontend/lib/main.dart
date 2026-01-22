@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:utilitybill_frontend/pages/users/bill_payment.dart';
 import 'pages/landing_page.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
@@ -7,6 +9,9 @@ import 'pages/admin/admin_dashboard.dart';
 import 'pages/utility/utility_dashboard.dart';
 
 void main() {
+  // Ensure debug baseline/size paints are disabled (removes yellow lines)
+  debugPaintBaselinesEnabled = false;
+  debugPaintSizeEnabled = false;
   runApp(const MyApp());
 }
 
@@ -35,6 +40,7 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomePage(),
         '/admin': (context) => const AdminDashboard(),
         '/utility': (context) => const UtilityDashboard(),
+        '/user/bill_payment': (context) => const BillPaymentPage(),
       },
     );
   }

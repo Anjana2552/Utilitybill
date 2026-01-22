@@ -1,14 +1,14 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, UserUtility, GeneratedBill, UtilityBill
+from .models import UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment
 
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model"""
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']
-        read_only_fields = ['id']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active']
+        read_only_fields = ['id', 'is_active']
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -84,3 +84,10 @@ class UtilityBillSerializer(serializers.ModelSerializer):
             'previous_reading', 'current_reading', 'total_amount', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ['id', 'bill', 'amount', 'payment_date', 'payment_method', 'status']
+        read_only_fields = ['id', 'payment_date']

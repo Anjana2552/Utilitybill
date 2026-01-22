@@ -33,7 +33,8 @@ class BlueGreenHeader extends StatelessWidget {
                       child: Text(
                         title!,
                         textAlign: TextAlign.center,
-                        style: titleStyle ??
+                        style:
+                            titleStyle ??
                             const TextStyle(
                               color: Colors.white,
                               fontSize: 24,
@@ -43,10 +44,7 @@ class BlueGreenHeader extends StatelessWidget {
                     ),
             ),
           ),
-          if (overlay != null)
-            Center(
-              child: overlay,
-            ),
+          if (overlay != null) Center(child: overlay),
         ],
       ),
     );
@@ -107,6 +105,7 @@ class CurvedHeaderPage extends StatelessWidget {
   final HeaderTitleAlignment titleAlignment;
   final List<Widget>? actions; // right-side header actions
   final Color? headerColor;
+  final Widget? bottomLeft; // extra widget under title on left-aligned header
 
   const CurvedHeaderPage({
     super.key,
@@ -117,6 +116,7 @@ class CurvedHeaderPage extends StatelessWidget {
     this.titleAlignment = HeaderTitleAlignment.center,
     this.actions,
     this.headerColor,
+    this.bottomLeft,
   });
 
   @override
@@ -128,17 +128,20 @@ class CurvedHeaderPage extends StatelessWidget {
           Stack(
             children: [
               if (titleAlignment == HeaderTitleAlignment.center)
-                BlueGreenHeader(height: headerHeight, title: title, backgroundColor: headerColor ?? const Color(0xFF7FD9CE))
+                BlueGreenHeader(
+                  height: headerHeight,
+                  title: title,
+                  backgroundColor: headerColor ?? const Color(0xFF7FD9CE),
+                )
               else
-                BlueGreenHeader(height: headerHeight, backgroundColor: headerColor ?? const Color(0xFF7FD9CE)),
+                BlueGreenHeader(
+                  height: headerHeight,
+                  backgroundColor: headerColor ?? const Color(0xFF7FD9CE),
+                ),
 
               if (titleAlignment == HeaderTitleAlignment.center) ...[
                 if (leading != null)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: SafeArea(child: leading!),
-                  ),
+                  Positioned(top: 8, left: 8, child: SafeArea(child: leading!)),
                 if (actions != null)
                   Positioned(
                     top: 8,
@@ -177,13 +180,16 @@ class CurvedHeaderPage extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (bottomLeft != null)
+                  Positioned(
+                    left: 20,
+                    top: 64,
+                    child: SafeArea(child: bottomLeft!),
+                  ),
               ],
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: child,
-          ),
+          Padding(padding: const EdgeInsets.all(16.0), child: child),
         ],
       ),
     );

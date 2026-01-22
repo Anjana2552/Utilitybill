@@ -32,8 +32,13 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
     });
     try {
       final prefs = await SharedPreferences.getInstance();
-      _userName = prefs.getString('full_name') ?? prefs.getString('user_username') ?? '';
-      final uri = Uri.parse('${ApiConfig.baseUrl}/user-utility/list/?user_name=${Uri.encodeQueryComponent(_userName)}');
+      _userName =
+          prefs.getString('full_name') ??
+          prefs.getString('user_username') ??
+          '';
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/user-utility/list/?user_name=${Uri.encodeQueryComponent(_userName)}',
+      );
       final resp = await http.get(uri);
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
@@ -84,7 +89,9 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(child: Text(_error!, style: const TextStyle(color: Colors.redAccent)));
+      return Center(
+        child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+      );
     }
     if (_items.isEmpty) {
       return Column(
@@ -117,7 +124,11 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 6)),
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 10,
+                    offset: Offset(0, 6),
+                  ),
                 ],
               ),
               child: ClipRRect(
@@ -172,21 +183,32 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
                           children: [
                             Text(
                               when,
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.edit, size: 20, color: Colors.white),
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    size: 20,
+                                    color: Colors.white,
+                                  ),
                                   tooltip: 'Edit',
                                   onPressed: () => _editItem(it),
                                   constraints: const BoxConstraints(),
                                   padding: EdgeInsets.zero,
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.white),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 20,
+                                    color: Colors.white,
+                                  ),
                                   tooltip: 'Delete',
                                   onPressed: () => _confirmDelete(it),
                                   constraints: const BoxConstraints(),
@@ -215,9 +237,9 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
       ),
     );
     if (res != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Updated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Updated')));
       await _load();
     }
   }
@@ -229,8 +251,14 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
         title: const Text('Delete bill?'),
         content: const Text('This will permanently delete the record.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -246,7 +274,9 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
       final resp = await http.delete(uri);
       if (resp.statusCode == 200) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deleted')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Deleted')));
         await _load();
       } else {
         if (!mounted) return;
@@ -256,7 +286,9 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -277,6 +309,7 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
         b.write('$label: $value');
       }
     }
+
     add('Connection', it['connection_type'] as String?);
     add('Consumer', it['consumer_number'] as String?);
     add('Water', it['water_connection_number'] as String?);
@@ -310,11 +343,20 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
       case 'electricity':
         return const [Color(0xFFF06292), Color(0xFFBA68C8)]; // pink -> purple
       case 'water':
-        return const [Color(0xFF4DD0E1), Color(0xFF1E88E5)]; // teal -> blue
+        return const [
+          Color(0xFF4DD0E1),
+          Color(0xFF00796B),
+        ]; // teal -> dark teal
       case 'gas':
-        return const [Color(0xFFFFA726), Color(0xFFF4511E)]; // orange -> deep orange
+        return const [
+          Color(0xFFFFA726),
+          Color(0xFFF4511E),
+        ]; // orange -> deep orange
       case 'wifi':
-        return const [Color(0xFF7E57C2), Color(0xFF5E35B1)]; // indigo -> deep purple
+        return const [
+          Color(0xFF7E57C2),
+          Color(0xFF5E35B1),
+        ]; // indigo -> deep purple
       case 'dth':
         return const [Color(0xFFAB47BC), Color(0xFF8E24AA)]; // purple shades
       default:

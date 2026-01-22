@@ -22,5 +22,13 @@ urlpatterns = [
     # Minimal UtilityBill endpoints
     path('utility-bill/add/', views.add_utility_bill, name='add-utility-bill'),
     path('utility-bill/list/', views.list_utility_bills, name='list-utility-bills'),
+    # Payments endpoints
+    path('payments/add/', views.add_payment, name='add-payment'),
+    path('payments/list/', views.list_payments, name='list-payments'),
+    path('payments/approve/', views.approve_payment, name='approve-payment'),
+    path('payments/reject/', views.reject_payment, name='reject-payment'),
+    # Admin user management
+    path('admin/set-user-active/', views.set_user_active, name='set-user-active'),
+    path('admin/delete-user/', views.delete_user_account, name='delete-user'),
     path('', include(router.urls)),
 ]

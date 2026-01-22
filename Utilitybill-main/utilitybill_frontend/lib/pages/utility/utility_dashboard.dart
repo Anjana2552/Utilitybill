@@ -4,11 +4,13 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../config/api_config.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
-import 'utility_payment.dart';
+import '../payment_reports_page.dart';
 import 'utility_profile.dart';
 import 'generate_bill.dart';
 import '../../widgets/theme_header.dart';
 import 'utility_users_list.dart';
+import '../bills_page.dart';
+import '../notifications.dart';
 
 class UtilityDashboard extends StatefulWidget {
   const UtilityDashboard({super.key});
@@ -25,8 +27,9 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
   String _providerName = '';
   int _providerUserCount = 0;
   String _username = '';
+  List<Map<String, dynamic>> _providerBills = [];
+  bool _loadingProviderBills = false;
   // Users list moved to a dedicated page; keep only count here.
-  
 
   @override
   void initState() {
@@ -42,13 +45,24 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
 
     // Detect provider name from username suffix
     final uLower = _username.toLowerCase();
-    if (uLower.endsWith('kseb')) {
+    if (uLower.contains('kseb')) {
       _providerName = 'kseb';
-      // Fire and forget; don't block initial UI
       // ignore: unawaited_futures
       _fetchProviderUserCount('kseb');
       // ignore: unawaited_futures
-      // Users list is shown on a separate page on tap.
+      _fetchProviderBills('kseb');
+    } else if (uLower.contains('kwa') || uLower.contains('water')) {
+      _providerName = 'water';
+      // ignore: unawaited_futures
+      _fetchProviderUserCount('water');
+      // ignore: unawaited_futures
+      _fetchProviderBills('water');
+    } else if (uLower.contains('gas')) {
+      _providerName = 'gas';
+      // ignore: unawaited_futures
+      _fetchProviderUserCount('gas');
+      // ignore: unawaited_futures
+      _fetchProviderBills('gas');
     }
 
     if (mounted) {
@@ -67,8 +81,13 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
 
   Future<void> _fetchProviderUserCount(String provider) async {
     try {
-      final uri = Uri.parse('${ApiConfig.baseUrl}/user-utility/count/?provider_name=${Uri.encodeQueryComponent(provider)}');
-      final resp = await http.get(uri, headers: { 'Content-Type': 'application/json' });
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/user-utility/count/?provider_name=${Uri.encodeQueryComponent(provider)}',
+      );
+      final resp = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final count = int.tryParse(data['count']?.toString() ?? '0') ?? 0;
@@ -80,10 +99,64 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
     } catch (_) {}
   }
 
+  Future<void> _fetchProviderBills(String provider) async {
+    setState(() => _loadingProviderBills = true);
+    try {
+      // For now, fetch from utility-bill list filtered by utility type.
+      // Map provider name to utility type label used in bills
+      String utilityFilter;
+      switch (provider.toLowerCase()) {
+        case 'kseb':
+          utilityFilter = 'Electricity';
+          break;
+        case 'water':
+        case 'kwa':
+          utilityFilter = 'Water';
+          break;
+        case 'gas':
+          utilityFilter = 'Gas';
+          break;
+        default:
+          utilityFilter = '';
+      }
+      final base = Uri.parse('${ApiConfig.baseUrl}/utility-bill/list/');
+      final uri = utilityFilter.isEmpty
+          ? base
+          : base.replace(queryParameters: {'utility_type': utilityFilter});
+      final resp = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final List<dynamic> results =
+            (data['results'] as List<dynamic>?) ?? const [];
+        if (!mounted) return;
+        setState(() {
+          _providerBills = results.cast<Map<String, dynamic>>();
+          _loadingProviderBills = false;
+        });
+      } else {
+        if (mounted) setState(() => _loadingProviderBills = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingProviderBills = false);
+    }
+  }
+
   // Removed inline users fetching; handled in UtilityUsersListPage
 
   @override
   Widget build(BuildContext context) {
+    // Map provider name to utility type label used in bills
+    String? _utilityTypeForProvider(String provider) {
+      final p = provider.toLowerCase();
+      if (p == 'kseb') return 'Electricity';
+      if (p == 'water') return 'Water';
+      if (p == 'gas') return 'Gas';
+      return null;
+    }
+
     final pages = <Widget>[
       _HomeSection(
         onReadyLogout: _handleLogout,
@@ -93,9 +166,13 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
         isLoadingGetter: () => _isLoading,
         providerNameGetter: () => _providerName,
         providerUserCountGetter: () => _providerUserCount,
+        billsGetter: () => _providerBills,
+        billsLoadingGetter: () => _loadingProviderBills,
       ),
       const GenerateBillPage(),
-      const UtilityPaymentPage(),
+      AdminPaymentReportsPage(
+        restrictedUtilityType: _utilityTypeForProvider(_providerName),
+      ),
       const UtilityProfilePage(),
     ];
     final items = <Widget>[
@@ -105,7 +182,14 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
       const Icon(Icons.person, size: 28, color: Colors.white),
     ];
 
-    return Scaffold(
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvoked: (didPop) {
+        if (!didPop && _currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+        }
+      },
+      child: Scaffold(
       backgroundColor: Colors.white,
       appBar: null,
       drawer: Drawer(
@@ -118,7 +202,11 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                   alignment: Alignment.bottomLeft,
                   child: Text(
                     'Menu',
-                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -142,7 +230,9 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                     onTap: () {
                       Navigator.of(context).pop();
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const GenerateBillPage()),
+                        MaterialPageRoute(
+                          builder: (_) => const GenerateBillPage(),
+                        ),
                       );
                     },
                   ),
@@ -151,8 +241,27 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                     title: const Text('View Bill'),
                     onTap: () {
                       Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('View Bill coming soon')),
+                      String? utilityType;
+                      switch (_providerName.toLowerCase()) {
+                        case 'kseb':
+                          utilityType = 'Electricity';
+                          break;
+                        case 'water':
+                        case 'kwa':
+                          utilityType = 'Water';
+                          break;
+                        case 'gas':
+                          utilityType = 'Gas';
+                          break;
+                        default:
+                          utilityType = null;
+                      }
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AdminBillsListPage(
+                            restrictedUtilityType: utilityType,
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -171,10 +280,12 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                 leading: const Icon(Icons.notifications_none),
                 title: const Text('Notifications'),
                 onTap: () {
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Notifications coming soon')),
-                  );
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsPage(),
+                      ),
+                    );
                 },
               ),
               const Divider(),
@@ -187,10 +298,7 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
           ),
         ),
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: CurvedNavigationBar(
         items: items,
         index: _currentIndex,
@@ -201,6 +309,7 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
         animationCurve: Curves.easeInOut,
         animationDuration: const Duration(milliseconds: 300),
         height: 60,
+      ),
       ),
     );
   }
@@ -240,11 +349,7 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 48,
-                color: Colors.white,
-              ),
+              Icon(icon, size: 48, color: Colors.white),
               const SizedBox(height: 12),
               Text(
                 title,
@@ -258,10 +363,7 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white70,
-                ),
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -290,11 +392,7 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 32,
-              ),
+              child: Icon(icon, color: color, size: 32),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -303,10 +401,7 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -335,6 +430,8 @@ class _HomeSection extends StatelessWidget {
   final bool Function() isLoadingGetter;
   final String Function() providerNameGetter;
   final int Function() providerUserCountGetter;
+  final List<Map<String, dynamic>> Function() billsGetter;
+  final bool Function() billsLoadingGetter;
 
   const _HomeSection({
     required this.onReadyLogout,
@@ -344,6 +441,8 @@ class _HomeSection extends StatelessWidget {
     required this.isLoadingGetter,
     required this.providerNameGetter,
     required this.providerUserCountGetter,
+    required this.billsGetter,
+    required this.billsLoadingGetter,
   });
 
   @override
@@ -353,6 +452,8 @@ class _HomeSection extends StatelessWidget {
     final email = emailGetter();
     final providerName = providerNameGetter();
     final providerUserCount = providerUserCountGetter();
+    final bills = billsGetter();
+    final billsLoading = billsLoadingGetter();
 
     return CurvedHeaderPage(
       title: 'Welcome back, ${fullName.isNotEmpty ? fullName : ''}',
@@ -381,6 +482,66 @@ class _HomeSection extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 12),
+            const Text(
+              'Recent Bills',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            if (billsLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (bills.isEmpty)
+              Card(
+                elevation: 1,
+                child: ListTile(
+                  leading: const Icon(Icons.receipt_long),
+                  title: const Text('No bills yet'),
+                  subtitle: Text(
+                    'Provider: ${providerName.isEmpty ? '-' : providerName.toUpperCase()}',
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: bills.length.clamp(0, 5),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final bill = bills[index];
+                  final id = (bill['bill_id'] ?? '').toString();
+                  final type = (bill['utility_type'] ?? '').toString();
+                  final amount = (bill['total_amount'] ?? '').toString();
+                  final dueOrCreated =
+                      (bill['due_date'] ?? bill['created_at'] ?? '').toString();
+                  return Card(
+                    elevation: 1,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.receipt_long,
+                        color: Color(0xFF34B3A0),
+                      ),
+                      title: Text('Invoice $id'),
+                      subtitle: Text(
+                        dueOrCreated.isEmpty
+                            ? type
+                            : '$type • ${bill.containsKey('due_date') ? 'Due' : 'On'} $dueOrCreated',
+                      ),
+                      trailing: Text(
+                        amount.isEmpty ? '' : '₹ $amount',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  );
+                },
+              ),
           ],
         ],
       ),
@@ -478,4 +639,3 @@ class _DashboardPill extends StatelessWidget {
     );
   }
 }
-

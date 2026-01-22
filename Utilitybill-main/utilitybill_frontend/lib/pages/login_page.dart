@@ -45,17 +45,12 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     final uri = Uri.parse('${ApiConfig.baseUrl}/auth/login/');
-    final body = jsonEncode({
-      'username': username,
-      'password': password,
-    });
+    final body = jsonEncode({'username': username, 'password': password});
 
     try {
       final resp = await http.post(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: body,
       );
 
@@ -70,7 +65,9 @@ class _LoginPageState extends State<LoginPage> {
         final lastName = (user?['last_name'] ?? '').toString();
         final computedFullName = ("$firstName $lastName").trim();
         final profileFullName = (profile?['full_name'] ?? '').toString();
-        final fullName = (computedFullName.isNotEmpty ? computedFullName : profileFullName).trim();
+        final fullName =
+            (computedFullName.isNotEmpty ? computedFullName : profileFullName)
+                .trim();
 
         // Extract and save session cookie
         final cookies = resp.headers['set-cookie'];
@@ -84,11 +81,21 @@ class _LoginPageState extends State<LoginPage> {
           }
         }
 
-        // Persist minimal session info
+        // Persist minimal session info + token (if provided)
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_email', user?['email']?.toString() ?? email);
-        await prefs.setString('user_username', user?['username']?.toString() ?? username);
+        await prefs.setString(
+          'user_email',
+          user?['email']?.toString() ?? email,
+        );
+        await prefs.setString(
+          'user_username',
+          user?['username']?.toString() ?? username,
+        );
         await prefs.setString('user_role', role);
+        final token = (data['token'] ?? '').toString();
+        if (token.isNotEmpty) {
+          await prefs.setString('auth_token', token);
+        }
         if (fullName.isNotEmpty) {
           await prefs.setString('full_name', fullName);
         }
@@ -98,7 +105,8 @@ class _LoginPageState extends State<LoginPage> {
         });
 
         // Role-based routing
-        final isExplicitAdminCreds = email == 'admin@gmail.com' && password == 'Admin@123';
+        final isExplicitAdminCreds =
+            email == 'admin@gmail.com' && password == 'Admin@123';
         if (role == 'admin' || isExplicitAdminCreds) {
           Navigator.pushReplacementNamed(context, '/admin');
         } else if (role == 'utility') {
@@ -130,10 +138,7 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(message), backgroundColor: Colors.red),
         );
       }
     } catch (e) {

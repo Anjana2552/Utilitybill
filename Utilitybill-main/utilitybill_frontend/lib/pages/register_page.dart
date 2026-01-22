@@ -83,9 +83,7 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       final resp = await http.post(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: body,
       );
 
@@ -115,10 +113,7 @@ class _RegisterPageState extends State<RegisterPage> {
           _isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(message), backgroundColor: Colors.red),
         );
       }
     } catch (e) {

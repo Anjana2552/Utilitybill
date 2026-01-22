@@ -40,9 +40,11 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
         final prefs = await SharedPreferences.getInstance();
         final sessionId = prefs.getString('sessionid');
 
-        print('Sending request to: ${ApiConfig.baseUrl}/admin/add-utility-authority/');
+        print(
+          'Sending request to: ${ApiConfig.baseUrl}/admin/add-utility-authority/',
+        );
         print('Session ID: $sessionId');
-        
+
         final response = await http.post(
           Uri.parse('${ApiConfig.baseUrl}/admin/add-utility-authority/'),
           headers: {
@@ -94,19 +96,27 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text('Email: ${_emailController.text}',
-                      style: const TextStyle(fontSize: 14)),
+                  Text(
+                    'Email: ${_emailController.text}',
+                    style: const TextStyle(fontSize: 14),
+                  ),
                   const SizedBox(height: 8),
-                  Text('Password: $password',
-                      style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF4B9A8F))),
+                  Text(
+                    'Password: $password',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF4B9A8F),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'Please save these credentials. The authority can use them to login.',
                     style: TextStyle(
-                        fontSize: 12, color: Colors.red, fontStyle: FontStyle.italic),
+                      fontSize: 12,
+                      color: Colors.red,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ],
               ),
@@ -129,7 +139,7 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
           } catch (e) {
             errorMessage = 'Failed to add authority: ${response.body}';
           }
-          
+
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -187,13 +197,19 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _nameController,
                   decoration: InputDecoration(
                     labelText: 'Authority Name',
-                    prefixIcon: const Icon(Icons.business, color: Color(0xFF4B9A8F)),
+                    prefixIcon: const Icon(
+                      Icons.business,
+                      color: Color(0xFF4B9A8F),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF7FD9CE), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF7FD9CE),
+                        width: 2,
+                      ),
                     ),
                   ),
                   validator: (value) {
@@ -209,13 +225,19 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   decoration: InputDecoration(
                     labelText: 'Utility Type',
                     hintText: 'e.g., Water, Electricity, Gas',
-                    prefixIcon: const Icon(Icons.category, color: Color(0xFF4B9A8F)),
+                    prefixIcon: const Icon(
+                      Icons.category,
+                      color: Color(0xFF4B9A8F),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF7FD9CE), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF7FD9CE),
+                        width: 2,
+                      ),
                     ),
                   ),
                   validator: (value) {
@@ -230,13 +252,19 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _contactController,
                   decoration: InputDecoration(
                     labelText: 'Contact Number',
-                    prefixIcon: const Icon(Icons.phone, color: Color(0xFF4B9A8F)),
+                    prefixIcon: const Icon(
+                      Icons.phone,
+                      color: Color(0xFF4B9A8F),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF7FD9CE), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF7FD9CE),
+                        width: 2,
+                      ),
                     ),
                   ),
                   keyboardType: TextInputType.phone,
@@ -252,13 +280,19 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _emailController,
                   decoration: InputDecoration(
                     labelText: 'Email Address',
-                    prefixIcon: const Icon(Icons.email, color: Color(0xFF4B9A8F)),
+                    prefixIcon: const Icon(
+                      Icons.email,
+                      color: Color(0xFF4B9A8F),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF7FD9CE), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF7FD9CE),
+                        width: 2,
+                      ),
                     ),
                   ),
                   keyboardType: TextInputType.emailAddress,
@@ -277,13 +311,19 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _addressController,
                   decoration: InputDecoration(
                     labelText: 'Address',
-                    prefixIcon: const Icon(Icons.location_on, color: Color(0xFF4B9A8F)),
+                    prefixIcon: const Icon(
+                      Icons.location_on,
+                      color: Color(0xFF4B9A8F),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF7FD9CE), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF7FD9CE),
+                        width: 2,
+                      ),
                     ),
                   ),
                   maxLines: 3,
@@ -336,10 +376,7 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   ),
                   child: const Text(
                     'Cancel',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],

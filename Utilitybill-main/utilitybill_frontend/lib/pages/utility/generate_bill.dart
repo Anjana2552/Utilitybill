@@ -63,12 +63,12 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     _prevReadingCtrl.addListener(_recomputeUnitsAndTotal);
     _currentReadingCtrl.addListener(_recomputeUnitsAndTotal);
     _rateCtrl.addListener(_recomputeUnitsAndTotal);
-        // Set default rate per unit based on utility type
-        if (_isWater) {
-          _rateCtrl.text = '10';
-        } else if (_isElectricity) {
-          _rateCtrl.text = '8';
-        }
+    // Set default rate per unit based on utility type
+    if (_isWater) {
+      _rateCtrl.text = '10';
+    } else if (_isElectricity) {
+      _rateCtrl.text = '8';
+    }
   }
 
   @override
@@ -118,7 +118,8 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
   String _generateBillId() {
     final now = DateTime.now();
     // Timestamp for uniqueness: YYYYMMDDHHMMSS
-    final ts = '${now.year.toString().padLeft(4, '0')}'
+    final ts =
+        '${now.year.toString().padLeft(4, '0')}'
         '${now.month.toString().padLeft(2, '0')}'
         '${now.day.toString().padLeft(2, '0')}'
         '${now.hour.toString().padLeft(2, '0')}'
@@ -151,18 +152,27 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     try {
       // Fetch all utilities (no provider filter) and filter by utility type client-side
       final uri = Uri.parse('${ApiConfig.baseUrl}/user-utility/list/');
-      final resp = await http.get(uri, headers: {'Content-Type': 'application/json'});
+      final resp = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
       if (resp.statusCode == 200) {
         final body = jsonDecode(resp.body) as Map<String, dynamic>;
-        final results = (body['results'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
-        final all = results.map((e) => _Consumer(
-              name: (e['user_name']?.toString() ?? '').trim(),
-              number: (e['consumer_number']?.toString() ?? '').trim(),
-              utilityType: (e['utility_type']?.toString() ?? '').trim(),
-            ))
+        final results = (body['results'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+        final all = results
+            .map(
+              (e) => _Consumer(
+                name: (e['user_name']?.toString() ?? '').trim(),
+                number: (e['consumer_number']?.toString() ?? '').trim(),
+                utilityType: (e['utility_type']?.toString() ?? '').trim(),
+              ),
+            )
             .where((c) => c.name.isNotEmpty || c.number.isNotEmpty)
             .toList();
-        all.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        all.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
         setState(() {
           _allConsumers = all;
           _applyConsumerFilter();
@@ -183,8 +193,12 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
 
   void _applyConsumerFilter() {
     final type = _utilityType.toLowerCase();
-    final filtered = _allConsumers.where((c) => c.utilityType.toLowerCase() == type).toList();
-    filtered.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final filtered = _allConsumers
+        .where((c) => c.utilityType.toLowerCase() == type)
+        .toList();
+    filtered.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     _consumers = filtered;
   }
 
@@ -193,7 +207,8 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       _selectedConsumerName = name;
       final matched = _consumers.firstWhere(
         (c) => c.name == name,
-        orElse: () => _Consumer(name: name ?? '', number: '', utilityType: _utilityType),
+        orElse: () =>
+            _Consumer(name: name ?? '', number: '', utilityType: _utilityType),
       );
       _consumerNumberCtrl.text = matched.number;
       // Prefill previous reading from local history for this consumer
@@ -251,7 +266,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     // Ensure due date is computed from reading date (+14 days)
     _dueDate ??= _readingDate!.add(const Duration(days: 14));
 
-    String _fmtDate(DateTime d) =>
+    String fmtDate(DateTime d) =>
         '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}'
             .trim();
 
@@ -260,14 +275,25 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       'bill_id': _billIdCtrl.text.trim(),
       'utility_type': _utilityType,
       'consumer_name': _selectedConsumerName,
-      'consumer_number': _isElectricity ? _consumerNumberCtrl.text.trim() : null,
-      'previous_reading': (_isElectricity || _isWater || _isGas) ? _prevReadingCtrl.text.trim() : null,
-      'current_reading': (_isElectricity || _isWater || _isGas) ? _currentReadingCtrl.text.trim() : null,
-      'reading_date': _fmtDate(_readingDate!),
-      'units_consumed': (_isElectricity || _isWater || _isGas) ? _unitsCtrl.text.trim() : null,
-      'rate_per_unit': (_isElectricity || _isWater || _isGas) ? _rateCtrl.text.trim() : null,
-      'due_date': _fmtDate(_dueDate!),
-      'total_amount': (_isElectricity || _isWater || _isGas || _isWifi || _isDth)
+      'consumer_number': _isElectricity
+          ? _consumerNumberCtrl.text.trim()
+          : null,
+      'previous_reading': (_isElectricity || _isWater || _isGas)
+          ? _prevReadingCtrl.text.trim()
+          : null,
+      'current_reading': (_isElectricity || _isWater || _isGas)
+          ? _currentReadingCtrl.text.trim()
+          : null,
+      'reading_date': fmtDate(_readingDate!),
+      'units_consumed': (_isElectricity || _isWater || _isGas)
+          ? _unitsCtrl.text.trim()
+          : null,
+      'rate_per_unit': (_isElectricity || _isWater || _isGas)
+          ? _rateCtrl.text.trim()
+          : null,
+      'due_date': fmtDate(_dueDate!),
+      'total_amount':
+          (_isElectricity || _isWater || _isGas || _isWifi || _isDth)
           ? _totalCtrl.text.trim()
           : _amountCtrl.text.trim(),
       'provider_name': _providerName,
@@ -282,7 +308,9 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       'dth_subscriber_id': _isDth ? _dthSubscriberIdCtrl.text.trim() : null,
       'dth_package_name': _isDth ? _selectedDthPackage : null,
       // Others extras
-      'specified_utility_type': _isOthers ? _othersSpecifyCtrl.text.trim() : null,
+      'specified_utility_type': _isOthers
+          ? _othersSpecifyCtrl.text.trim()
+          : null,
     };
 
     _saveToBackend(payload);
@@ -294,23 +322,28 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       final consumerId = _isElectricity
           ? _consumerNumberCtrl.text.trim()
           : _isWater
-              ? _waterConnCtrl.text.trim()
-              : _isGas
-                  ? _gasConsumerIdCtrl.text.trim()
-                  : _isWifi
-                      ? _wifiCustomerIdCtrl.text.trim()
-                      : _isDth
-                          ? _dthSubscriberIdCtrl.text.trim()
-                          : '';
+          ? _waterConnCtrl.text.trim()
+          : _isGas
+          ? _gasConsumerIdCtrl.text.trim()
+          : _isWifi
+          ? _wifiCustomerIdCtrl.text.trim()
+          : _isDth
+          ? _dthSubscriberIdCtrl.text.trim()
+          : '';
 
       final minimal = {
         'utility_type': _utilityType,
         'bill_id': payload['bill_id'],
         'consumer_name': payload['consumer_name'],
         'consumer_id': consumerId.isNotEmpty ? consumerId : null,
-        'previous_reading': (_isElectricity || _isWater || _isGas) ? payload['previous_reading'] : null,
-        'current_reading': (_isElectricity || _isWater || _isGas) ? payload['current_reading'] : null,
-        'total_amount': (_isElectricity || _isWater || _isGas || _isWifi || _isDth)
+        'previous_reading': (_isElectricity || _isWater || _isGas)
+            ? payload['previous_reading']
+            : null,
+        'current_reading': (_isElectricity || _isWater || _isGas)
+            ? payload['current_reading']
+            : null,
+        'total_amount':
+            (_isElectricity || _isWater || _isGas || _isWifi || _isDth)
             ? payload['total_amount']
             : payload['total_amount'],
       };
@@ -324,7 +357,11 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       if (!mounted) return;
       if (resp.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Bill saved: ${payload['bill_id']} (₹${payload['total_amount']})')),
+          SnackBar(
+            content: Text(
+              'Bill saved: ${payload['bill_id']} (₹${payload['total_amount']})',
+            ),
+          ),
         );
         // Save last current reading for this consumer for next time (electricity only)
         if (_isElectricity) {
@@ -333,13 +370,15 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
         _resetForm();
       } else {
         final msg = resp.body.isNotEmpty ? resp.body : 'Failed to save bill';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -392,7 +431,11 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       _currentReadingCtrl.clear();
       _readingDate = null;
       _unitsCtrl.clear();
-      _rateCtrl.text = _isWater ? '10' : (_isElectricity || _isGas) ? '8' : '';
+      _rateCtrl.text = _isWater
+          ? '10'
+          : (_isElectricity || _isGas)
+          ? '8'
+          : '';
       _dueDate = null;
       if (_isWifi) {
         _totalCtrl.text = '799.00';
@@ -449,10 +492,18 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
             children: [
               // Utility Type
               DropdownButtonFormField<String>(
-                value: _utilityType,
-                items: const [
-                  'Electricity', 'Water', 'Gas', 'WiFi', 'DTH', 'Others'
-                ].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                initialValue: _utilityType,
+                items:
+                    const [
+                          'Electricity',
+                          'Water',
+                          'Gas',
+                          'WiFi',
+                          'DTH',
+                          'Others',
+                        ]
+                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                        .toList(),
                 onChanged: (v) {
                   if (v == null) return;
                   setState(() {
@@ -504,25 +555,29 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                   labelText: 'Bill ID',
                   prefixIcon: Icon(Icons.confirmation_number_outlined),
                 ),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 12),
 
               // Consumer Name dropdown
               DropdownButtonFormField<String>(
-                value: _selectedConsumerName,
+                initialValue: _selectedConsumerName,
                 items: _consumers
-                    .map((c) => DropdownMenuItem<String>(
-                          value: c.name,
-                          child: Text(c.name.isNotEmpty ? c.name : 'Unknown'),
-                        ))
+                    .map(
+                      (c) => DropdownMenuItem<String>(
+                        value: c.name,
+                        child: Text(c.name.isNotEmpty ? c.name : 'Unknown'),
+                      ),
+                    )
                     .toList(),
                 onChanged: _loadingConsumers ? null : _onSelectConsumer,
                 decoration: const InputDecoration(
                   labelText: 'Consumer Name',
                   prefixIcon: Icon(Icons.person_outline),
                 ),
-                validator: (v) => (v == null || v.isEmpty) ? 'Select a consumer' : null,
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Select a consumer' : null,
               ),
               const SizedBox(height: 12),
 
@@ -535,7 +590,8 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                     labelText: 'Consumer Number',
                     prefixIcon: Icon(Icons.numbers),
                   ),
-                  validator: (v) => _isElectricity && (v == null || v.trim().isEmpty)
+                  validator: (v) =>
+                      _isElectricity && (v == null || v.trim().isEmpty)
                       ? 'Missing consumer number'
                       : null,
                 ),
@@ -571,7 +627,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: 'Basic',
+                  initialValue: 'Basic',
                   items: const ['Basic']
                       .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                       .toList(),
@@ -598,7 +654,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                 ),
                 const SizedBox(height: 12),
               ],
-              
+
               // DTH-specific fields
               if (_isDth) ...[
                 TextFormField(
@@ -613,15 +669,18 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _selectedDthPackage,
-                  items: const ['299 - 15 days', '499 - 30 days', '799 - 60 days']
-                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                      .toList(),
+                  initialValue: _selectedDthPackage,
+                  items:
+                      const ['299 - 15 days', '499 - 30 days', '799 - 60 days']
+                          .map(
+                            (p) => DropdownMenuItem(value: p, child: Text(p)),
+                          )
+                          .toList(),
                   onChanged: (v) => setState(() {
-                        _selectedDthPackage = v ?? '299 - 15 days';
-                        final amt = _amountFromPlan(_selectedDthPackage) ?? 0.0;
-                        _totalCtrl.text = amt.toStringAsFixed(2);
-                      }),
+                    _selectedDthPackage = v ?? '299 - 15 days';
+                    final amt = _amountFromPlan(_selectedDthPackage) ?? 0.0;
+                    _totalCtrl.text = amt.toStringAsFixed(2);
+                  }),
                   decoration: const InputDecoration(
                     labelText: 'Package Name',
                     prefixIcon: Icon(Icons.tv_outlined),
@@ -649,12 +708,16 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               if (_isElectricity || _isWater || _isGas) ...[
                 TextFormField(
                   controller: _prevReadingCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Previous Reading',
                     prefixIcon: Icon(Icons.speed),
                   ),
-                  validator: (v) => (_isElectricity || _isWater || _isGas) && (double.tryParse(v?.trim() ?? '') == null)
+                  validator: (v) =>
+                      (_isElectricity || _isWater || _isGas) &&
+                          (double.tryParse(v?.trim() ?? '') == null)
                       ? 'Enter a valid number'
                       : null,
                 ),
@@ -665,12 +728,16 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               if (_isElectricity || _isWater || _isGas) ...[
                 TextFormField(
                   controller: _currentReadingCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Current Meter Reading',
                     prefixIcon: Icon(Icons.speed_outlined),
                   ),
-                  validator: (v) => (_isElectricity || _isWater || _isGas) && (double.tryParse(v?.trim() ?? '') == null)
+                  validator: (v) =>
+                      (_isElectricity || _isWater || _isGas) &&
+                          (double.tryParse(v?.trim() ?? '') == null)
                       ? 'Enter a valid number'
                       : null,
                 ),
@@ -706,8 +773,8 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                     labelText: _isWater
                         ? 'Water Used'
                         : _isGas
-                            ? 'Gas Used'
-                            : 'Units Consumed',
+                        ? 'Gas Used'
+                        : 'Units Consumed',
                     prefixIcon: const Icon(Icons.bolt_outlined),
                   ),
                 ),
@@ -718,12 +785,16 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               if (_isElectricity || _isWater || _isGas) ...[
                 TextFormField(
                   controller: _rateCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Rate per Unit (₹)',
                     prefixIcon: Icon(Icons.currency_rupee),
                   ),
-                  validator: (v) => (_isElectricity || _isWater || _isGas) && (double.tryParse(v?.trim() ?? '') == null)
+                  validator: (v) =>
+                      (_isElectricity || _isWater || _isGas) &&
+                          (double.tryParse(v?.trim() ?? '') == null)
                       ? 'Enter a valid rate'
                       : null,
                 ),
@@ -760,12 +831,16 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               else
                 TextFormField(
                   controller: _amountCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Amount (₹)',
                     prefixIcon: Icon(Icons.currency_rupee),
                   ),
-                  validator: (v) => !_isElectricity && (double.tryParse(v?.trim() ?? '') == null)
+                  validator: (v) =>
+                      !_isElectricity &&
+                          (double.tryParse(v?.trim() ?? '') == null)
                       ? 'Enter a valid amount'
                       : null,
                 ),
@@ -795,5 +870,9 @@ class _Consumer {
   final String name;
   final String number;
   final String utilityType;
-  _Consumer({required this.name, required this.number, required this.utilityType});
+  _Consumer({
+    required this.name,
+    required this.number,
+    required this.utilityType,
+  });
 }
