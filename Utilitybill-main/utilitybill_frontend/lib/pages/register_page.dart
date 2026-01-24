@@ -146,21 +146,59 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Container(
                 height: heightOfScreen * 0.35,
                 decoration: const BoxDecoration(color: Color(0xFF7FD9CE)),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8.0, top: 8.0),
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white,
-                          size: 28,
+                child: Stack(
+                  children: [
+                    // Back button at top-left
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8.0, top: 8.0),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
                         ),
-                        onPressed: () => Navigator.pop(context),
                       ),
                     ),
-                  ),
+                    // Centered header title + sub texts
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Text(
+                            'Sign up',
+                            style: TextStyle(
+                              fontSize: 42,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Create Account',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Sign up to get started',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -172,33 +210,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 20),
-                    // Sign up Title
-                    const Text(
-                      'Sign up',
-                      style: TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF6B7280),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    const Text(
-                      'Create Account',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2D3142),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Sign up to get started',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
                     // Full Name Field
                     const Text(
                       'Full Name',

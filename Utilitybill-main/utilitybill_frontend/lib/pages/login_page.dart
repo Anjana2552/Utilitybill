@@ -155,6 +155,14 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _goBackToLanding() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacementNamed(context, '/');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     var heightOfScreen = MediaQuery.of(context).size.height;
@@ -171,6 +179,59 @@ class _LoginPageState extends State<LoginPage> {
               child: Container(
                 height: heightOfScreen * 0.45,
                 decoration: const BoxDecoration(color: Color(0xFF7FD9CE)),
+                child: Stack(
+                  children: [
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8.0, top: 8.0),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            onPressed: _goBackToLanding,
+                            tooltip: 'Back',
+                          ),
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Text(
+                            'Log in',
+                            style: TextStyle(
+                              fontSize: 42,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Welcome back',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Sign in to continue',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             // Form Section
@@ -181,17 +242,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 20),
-                    // Log in Title
-                    const Text(
-                      'Log in',
-                      style: TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF6B7280),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 24),
                     // Email Field
                     const Text(
                       'Email',

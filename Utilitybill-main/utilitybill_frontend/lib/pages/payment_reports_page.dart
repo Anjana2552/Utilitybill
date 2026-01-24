@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../widgets/theme_header.dart';
 import '../config/api_config.dart';
@@ -24,12 +25,24 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
   DateTime? _fromDate;
   DateTime? _toDate;
   String? _statusFilter;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _statusFilter = widget.initialStatus;
-    _fetchData();
+    _loadRoleAndFetch();
+  }
+
+  Future<void> _loadRoleAndFetch() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final role = (prefs.getString('user_role') ?? 'user').toLowerCase();
+      _isAdmin = role == 'admin';
+    } catch (_) {
+      _isAdmin = false;
+    }
+    await _fetchData();
   }
 
   Future<void> _fetchData() async {
@@ -403,28 +416,29 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
                               ),
                               const SizedBox(height: 8),
                               if ((p['status'] ?? 'pending') == 'pending')
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton.icon(
-                                      onPressed: () async {
-                                        final ok = await _updatePaymentStatus(p['id'], true);
-                                        if (ok && mounted) setState(() { p['status'] = 'approved'; });
-                                      },
-                                      icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-                                      label: const Text('Approve', style: TextStyle(color: Colors.green)),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton.icon(
-                                      onPressed: () async {
-                                        final ok = await _updatePaymentStatus(p['id'], false);
-                                        if (ok && mounted) setState(() { p['status'] = 'rejected'; });
-                                      },
-                                      icon: const Icon(Icons.highlight_off, color: Colors.redAccent),
-                                      label: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
-                                    ),
-                                  ],
-                                ),
+                                if (_isAdmin)
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () async {
+                                          final ok = await _updatePaymentStatus(p['id'], true);
+                                          if (ok && mounted) setState(() { p['status'] = 'approved'; });
+                                        },
+                                        icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                                        label: const Text('Approve', style: TextStyle(color: Colors.green)),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      TextButton.icon(
+                                        onPressed: () async {
+                                          final ok = await _updatePaymentStatus(p['id'], false);
+                                          if (ok && mounted) setState(() { p['status'] = 'rejected'; });
+                                        },
+                                        icon: const Icon(Icons.highlight_off, color: Colors.redAccent),
+                                        label: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
+                                      ),
+                                    ],
+                                  ),
                             ],
                           ),
                         ),

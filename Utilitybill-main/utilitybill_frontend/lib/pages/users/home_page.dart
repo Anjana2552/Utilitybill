@@ -362,6 +362,17 @@ class _HomePageState extends State<HomePage> {
               ? 'Payments'
               : 'Profile',
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none, color: Colors.white),
+            tooltip: 'Notifications',
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Notifications coming soon')),
+              );
+            },
+          ),
+        ],
         backgroundColor: const Color(0xFF7FD9CE),
         foregroundColor: Colors.white,
         elevation: 0,
