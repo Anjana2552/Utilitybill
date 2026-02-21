@@ -8,7 +8,13 @@ import '../config/api_config.dart';
 class AdminPaymentReportsPage extends StatefulWidget {
   final String? initialStatus; // e.g., 'pending', 'approved', 'rejected'
   final String? restrictedUtilityType; // e.g., 'Electricity', 'Water'
-  const AdminPaymentReportsPage({super.key, this.initialStatus, this.restrictedUtilityType});
+  final String? restrictedProviderName; // e.g., 'wifi', 'kseb'
+  const AdminPaymentReportsPage({
+    super.key,
+    this.initialStatus,
+    this.restrictedUtilityType,
+    this.restrictedProviderName,
+  });
 
   @override
   State<AdminPaymentReportsPage> createState() =>
@@ -34,6 +40,17 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
     _loadRoleAndFetch();
   }
 
+  @override
+  void didUpdateWidget(covariant AdminPaymentReportsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the restricted utility type changes (e.g., after dashboard detects
+    // the authority type), refetch with the new restriction.
+    if (oldWidget.restrictedUtilityType != widget.restrictedUtilityType ||
+        oldWidget.restrictedProviderName != widget.restrictedProviderName) {
+      _fetchData();
+    }
+  }
+
   Future<void> _loadRoleAndFetch() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -50,7 +67,8 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
     try {
       // Fetch payments
       final payUri = Uri.parse(
-          '${ApiConfig.baseUrl}/payments/list/${_statusFilter != null ? '?status=${_statusFilter}' : ''}');
+        '${ApiConfig.baseUrl}/payments/list/${_statusFilter != null ? '?status=${_statusFilter}' : ''}',
+      );
       final payResp = await http.get(
         payUri,
         headers: {'Content-Type': 'application/json'},
@@ -63,7 +81,17 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
       }
 
       // Fetch utility bills for pending computation
-      final utilUri = Uri.parse('${ApiConfig.baseUrl}/utility-bill/list/');
+      final utilBase = Uri.parse('${ApiConfig.baseUrl}/utility-bill/list/');
+      final Map<String, String> q = {};
+      if (widget.restrictedUtilityType != null &&
+          widget.restrictedUtilityType!.isNotEmpty) {
+        q['utility_type'] = widget.restrictedUtilityType!;
+      }
+      if (widget.restrictedProviderName != null &&
+          widget.restrictedProviderName!.isNotEmpty) {
+        q['provider_name'] = widget.restrictedProviderName!;
+      }
+      final utilUri = q.isEmpty ? utilBase : utilBase.replace(queryParameters: q);
       final utilResp = await http.get(
         utilUri,
         headers: {'Content-Type': 'application/json'},
@@ -76,17 +104,33 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
       }
 
       // If restricted by utility type (authority view), filter bills and payments
-      if (widget.restrictedUtilityType != null && widget.restrictedUtilityType!.isNotEmpty) {
+      if (widget.restrictedUtilityType != null &&
+          widget.restrictedUtilityType!.isNotEmpty) {
         final String restrict = widget.restrictedUtilityType!.toLowerCase();
-        _utilityBills = _utilityBills.where((b) => (b['utility_type'] ?? '').toString().toLowerCase() == restrict).toList();
-        final Set<String> allowedBillIds = _utilityBills.map((b) => (b['bill_id'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
-        _payments = _payments.where((p) => allowedBillIds.contains((p['bill_id'] ?? '').toString())).toList();
+        _utilityBills = _utilityBills
+            .where(
+              (b) =>
+                  (b['utility_type'] ?? '').toString().toLowerCase() ==
+                  restrict,
+            )
+            .toList();
+        final Set<String> allowedBillIds = _utilityBills
+            .map((b) => (b['bill_id'] ?? '').toString())
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        _payments = _payments
+            .where(
+              (p) => allowedBillIds.contains((p['bill_id'] ?? '').toString()),
+            )
+            .toList();
       }
 
       // Recompute totals after any filtering
       _paymentsByBill.clear();
       double total = 0.0;
       for (final p in _payments) {
+        final status = (p['status'] ?? '').toString().toLowerCase();
+        if (status != 'approved') continue; // count only approved payments
         final bid = (p['bill_id'] ?? '').toString();
         final amt = double.tryParse((p['amount'] ?? '0').toString()) ?? 0.0;
         total += amt;
@@ -131,7 +175,9 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
       lastDate: last,
     );
     if (picked != null) {
-      setState(() => _fromDate = DateTime(picked.year, picked.month, picked.day));
+      setState(
+        () => _fromDate = DateTime(picked.year, picked.month, picked.day),
+      );
     }
   }
 
@@ -146,7 +192,16 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
       lastDate: last,
     );
     if (picked != null) {
-      setState(() => _toDate = DateTime(picked.year, picked.month, picked.day, 23, 59, 59));
+      setState(
+        () => _toDate = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          23,
+          59,
+          59,
+        ),
+      );
     }
   }
 
@@ -188,13 +243,16 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
       if (_toDate != null && dt.isAfter(_toDate!)) return false;
       return true;
     }).toList();
-    final filteredTotal = filteredPayments.fold<double>(0.0, (sum, p) => sum + _parseAmount(p['amount']));
+    final filteredTotal = filteredPayments
+        .where(
+          (p) => (p['status'] ?? '').toString().toLowerCase() == 'approved',
+        )
+        .fold<double>(0.0, (sum, p) => sum + _parseAmount(p['amount']));
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scheme.background,
       appBar: AppBar(
         title: const Text('Payment Reports'),
-        backgroundColor: const Color(0xFF7FD9CE),
-        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SafeArea(
@@ -210,7 +268,7 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
                       key: const ValueKey('open'),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
+                        color: scheme.surface.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Wrap(
@@ -221,11 +279,14 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.payments, color: Colors.black87),
+                              Icon(Icons.payments, color: scheme.onSurface),
                               const SizedBox(width: 6),
                               Text(
                                 'Total: ${filteredTotal.toStringAsFixed(2)}',
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface,
+                                ),
                               ),
                             ],
                           ),
@@ -252,7 +313,8 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
                           IconButton(
                             tooltip: 'Close',
                             icon: const Icon(Icons.close),
-                            onPressed: () => setState(() => _filterOpen = false),
+                            onPressed: () =>
+                                setState(() => _filterOpen = false),
                           ),
                         ],
                       ),
@@ -261,17 +323,20 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
                       key: const ValueKey('closed'),
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.payments, color: Colors.white),
+                        Icon(Icons.payments, color: Theme.of(context).colorScheme.onPrimary),
                         const SizedBox(width: 8),
                         Text(
                           'Total Collected: ${_totalCollected.toStringAsFixed(2)}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white70),
+                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                            side: BorderSide(color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)),
                           ),
                           onPressed: () => setState(() => _filterOpen = true),
                           icon: const Icon(Icons.search),
@@ -280,174 +345,220 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
                       ],
                     ),
             ),
-            child: Builder(builder: (context) {
-              if (_loading) {
-                return const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Pending Payments',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  if (pending.isEmpty)
-                    const Text('No pending payments')
-                  else
+            child: Builder(
+              builder: (context) {
+                if (_loading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Pending Payments',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (pending.isEmpty)
+                      const Text('No pending payments')
+                    else
+                      ListView.builder(
+                        physics: const NeverScrollableScrollPhysics(),
+                        shrinkWrap: true,
+                        itemCount: pending.length,
+                        itemBuilder: (context, index) {
+                          final it = pending[index];
+                          return Card(
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: ListTile(
+                              leading: Icon(
+                                Icons.person_outline,
+                                color: Theme.of(context).colorScheme.secondary,
+                              ),
+                              title: Text(
+                                it['consumer_name'].toString().isEmpty
+                                    ? 'User'
+                                    : it['consumer_name'],
+                              ),
+                              subtitle: Text(
+                                'Bill: ${it['bill_id']} • ${it['utility_type']}',
+                              ),
+                              trailing: (it['due'] as double) > 0
+                                  ? Text(
+                                      'Due: ${(it['due'] as double).toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Unpaid',
+                                      style: TextStyle(color: Colors.redAccent),
+                                    ),
+                            ),
+                          );
+                        },
+                      ),
+                    // const SizedBox(height: 16),
+                    // const Text(
+                    //   'Payments',
+                    //   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    // ),
+                    const SizedBox(height: 8),
                     ListView.builder(
                       physics: const NeverScrollableScrollPhysics(),
                       shrinkWrap: true,
-                      itemCount: pending.length,
+                      itemCount: filteredPayments.length,
                       itemBuilder: (context, index) {
-                        final it = pending[index];
+                        final p = filteredPayments[index];
                         return Card(
-                          elevation: 1,
+                          elevation: 2,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: ListTile(
-                            leading: const Icon(Icons.person_outline, color: Color(0xFF4B9A8F)),
-                            title: Text(it['consumer_name'].toString().isEmpty ? 'User' : it['consumer_name']),
-                            subtitle: Text('Bill: ${it['bill_id']} • ${it['utility_type']}'),
-                            trailing: (it['due'] as double) > 0
-                                ? Text(
-                                    'Due: ${(it['due'] as double).toStringAsFixed(2)}',
-                                    style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
-                                  )
-                                : const Text('Unpaid', style: TextStyle(color: Colors.redAccent)),
-                          ),
-                        );
-                      },
-                    ),
-                  // const SizedBox(height: 16),
-                  // const Text(
-                  //   'Payments',
-                  //   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  // ),
-                  const SizedBox(height: 8),
-                  ListView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
-                    itemCount: filteredPayments.length,
-                    itemBuilder: (context, index) {
-                      final p = filteredPayments[index];
-                      return Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.payments_outlined,
-                                    color: Color(0xFF4B9A8F),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      (p['bill_id'] ?? '').toString(),
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.payments_outlined,
+                                      color: Theme.of(context).colorScheme.secondary,
                                     ),
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _PaymentStatusChip(status: (p['status'] ?? 'pending').toString()),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        (p['amount'] ?? '').toString(),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        (p['bill_id'] ?? '').toString(),
                                         style: const TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 12,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.calendar_month_outlined,
-                                    size: 16,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    (p['payment_date'] ?? '').toString(),
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black87,
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.receipt_long,
-                                    size: 16,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    (p['payment_method'] ?? '').toString(),
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black87,
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _PaymentStatusChip(
+                                          status: (p['status'] ?? 'pending')
+                                              .toString(),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          (p['amount'] ?? '').toString(),
+                                          style: const TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              if ((p['status'] ?? 'pending') == 'pending')
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.calendar_month_outlined,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      (p['payment_date'] ?? '').toString(),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.receipt_long,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      (p['payment_method'] ?? '').toString(),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
                                 if (_isAdmin)
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
-                                      TextButton.icon(
-                                        onPressed: () async {
-                                          final ok = await _updatePaymentStatus(p['id'], true);
-                                          if (ok && mounted) setState(() { p['status'] = 'approved'; });
-                                        },
-                                        icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-                                        label: const Text('Approve', style: TextStyle(color: Colors.green)),
-                                      ),
+                                      if ((p['status'] ?? 'pending') != 'approved')
+                                        TextButton.icon(
+                                          onPressed: () async {
+                                            final ok = await _updatePaymentStatus(
+                                              p['id'],
+                                              true,
+                                            );
+                                            if (ok && mounted) setState(() {
+                                              p['status'] = 'approved';
+                                            });
+                                          },
+                                          icon: const Icon(
+                                            Icons.check_circle_outline,
+                                            color: Colors.green,
+                                          ),
+                                          label: const Text(
+                                            'Approve',
+                                            style: TextStyle(color: Colors.green),
+                                          ),
+                                        ),
                                       const SizedBox(width: 8),
-                                      TextButton.icon(
-                                        onPressed: () async {
-                                          final ok = await _updatePaymentStatus(p['id'], false);
-                                          if (ok && mounted) setState(() { p['status'] = 'rejected'; });
-                                        },
-                                        icon: const Icon(Icons.highlight_off, color: Colors.redAccent),
-                                        label: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
-                                      ),
+                                      if ((p['status'] ?? 'pending') != 'rejected')
+                                        TextButton.icon(
+                                          onPressed: () async {
+                                            final ok = await _updatePaymentStatus(
+                                              p['id'],
+                                              false,
+                                            );
+                                            if (ok && mounted) setState(() {
+                                              p['status'] = 'rejected';
+                                            });
+                                          },
+                                          icon: const Icon(
+                                            Icons.highlight_off,
+                                            color: Colors.redAccent,
+                                          ),
+                                          label: const Text(
+                                            'Reject',
+                                            style: TextStyle(color: Colors.redAccent),
+                                          ),
+                                        ),
                                     ],
                                   ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              );
-            }),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -485,7 +596,11 @@ class _PaymentStatusChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -493,7 +608,9 @@ class _PaymentStatusChip extends StatelessWidget {
 
 Future<bool> _updatePaymentStatus(dynamic id, bool approve) async {
   try {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/${approve ? 'payments/approve/' : 'payments/reject/'}');
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/${approve ? 'payments/approve/' : 'payments/reject/'}',
+    );
     final resp = await http.post(
       uri,
       headers: {'Content-Type': 'application/json'},

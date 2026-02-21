@@ -15,9 +15,14 @@ class UserProfile(models.Model):
     email = models.EmailField(blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
     phone = models.CharField(max_length=20, blank=True)
+    house_number = models.CharField(max_length=50, blank=True)
     address = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Simple OTP verification fields
+    otp_code = models.CharField(max_length=6, blank=True)
+    otp_expires_at = models.DateTimeField(null=True, blank=True)
+    otp_verified = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.user.username}'s profile ({self.get_role_display()})"
@@ -40,6 +45,7 @@ class UserUtility(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='utilities', null=True, blank=True)
     # Keep original column names via db_column for exact MySQL mapping where typos were provided
     user_name = models.CharField(max_length=150, blank=True)
+    house_number = models.CharField(max_length=50, blank=True)
     utility_type = models.CharField(max_length=50)
     provider_name = models.CharField(max_length=150, blank=True)
     consumer_number = models.CharField(max_length=100, blank=True, db_column='consumr_number')
@@ -160,3 +166,72 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Payment for {self.bill.bill_id} - {self.amount}"
+
+
+class ChatMessage(models.Model):
+    """Simple chat message between a user and a utility authority.
+
+    A conversation is identified by (user_name, provider_name).
+    The sender is captured by role and optional username for traceability.
+    """
+    ROLE_CHOICES = (
+        ('user', 'User'),
+        ('utility', 'Utility'),
+        ('system', 'System'),
+    )
+
+    user_name = models.CharField(max_length=150)
+    provider_name = models.CharField(max_length=150)
+    sender_role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    sender_username = models.CharField(max_length=150, blank=True)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'chat_message'
+        indexes = [
+            models.Index(fields=['user_name']),
+            models.Index(fields=['provider_name']),
+            models.Index(fields=['created_at']),
+        ]
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.provider_name}:{self.user_name} [{self.sender_role}] {self.text[:20]}"
+
+
+class Wallet(models.Model):
+    """Simple wallet tied to a user for refunds/credits.
+
+    Balance is maintained as Decimal for currency precision.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='wallet')
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'wallet'
+
+    def __str__(self):
+        return f"Wallet({self.user.username}) ₹{self.balance}"
+
+
+class WalletTransaction(models.Model):
+    """Transaction history for wallet operations (credit/debit)."""
+    TYPE_CHOICES = (
+        ('credit', 'Credit'),
+        ('debit', 'Debit'),
+    )
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='transactions')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES)
+    reason = models.CharField(max_length=255, blank=True)
+    payment = models.ForeignKey(Payment, null=True, blank=True, on_delete=models.SET_NULL, related_name='refund_txn')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'wallet_transaction'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.type.title()} ₹{self.amount} ({self.wallet.user.username})"

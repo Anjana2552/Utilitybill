@@ -28,7 +28,7 @@ class _AdminAuthoritiesPageState extends State<AdminAuthoritiesPage> {
     if (u.contains('kseb') || u.contains('electric')) return 'Electricity';
     if (u.contains('water')) return 'Water';
     if (u.contains('gas')) return 'Gas';
-    if (u.contains('wifi') || u.contains('internet')) return 'Wifi';
+    if (u.contains('wifi') || u.contains('internet')) return 'WiFi';
     if (u.contains('dth')) return 'DTH';
     return '—';
   }
@@ -118,16 +118,13 @@ class _AdminAuthoritiesPageState extends State<AdminAuthoritiesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
         title: const Text('Authorities'),
-        backgroundColor: const Color(0xFF7FD9CE),
-        foregroundColor: Colors.white,
-        elevation: 0,
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _onAdd,
-        backgroundColor: const Color(0xFF34B3A0),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: SafeArea(
@@ -163,9 +160,9 @@ class _AdminAuthoritiesPageState extends State<AdminAuthoritiesPage> {
                           children: [
                             Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.account_balance,
-                                  color: Color(0xFF34B3A0),
+                                  color: Theme.of(context).colorScheme.secondary,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(

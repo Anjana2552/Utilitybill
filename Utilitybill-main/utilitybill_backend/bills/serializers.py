@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment
+from .models import (
+    UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment, ChatMessage, Wallet, WalletTransaction
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -18,7 +20,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ['id', 'user', 'full_name', 'email', 'role', 'role_display', 'phone', 'address', 'created_at', 'updated_at']
+        fields = ['id', 'user', 'full_name', 'email', 'role', 'role_display', 'phone', 'house_number', 'address', 'created_at', 'updated_at']
         read_only_fields = ['id', 'role', 'created_at', 'updated_at']
 
 
@@ -54,7 +56,7 @@ class UserUtilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = UserUtility
         fields = [
-            'id', 'user', 'user_name', 'utility_type', 'provider_name',
+            'id', 'user', 'user_name', 'house_number', 'utility_type', 'provider_name',
             'consumer_number', 'water_connection_number', 'gas_connection_number',
             'wifi_consumer_id', 'dth_subscriber_id', 'meter_number',
             'connection_type', 'plan_name', 'is_active', 'created_at'
@@ -91,3 +93,29 @@ class PaymentSerializer(serializers.ModelSerializer):
         model = Payment
         fields = ['id', 'bill', 'amount', 'payment_date', 'payment_method', 'status']
         read_only_fields = ['id', 'payment_date']
+
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
+        fields = [
+            'id', 'user_name', 'provider_name', 'sender_role', 'sender_username',
+            'text', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class WalletSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Wallet
+        fields = ['id', 'user', 'balance', 'updated_at']
+        read_only_fields = ['id', 'user', 'updated_at']
+
+
+class WalletTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WalletTransaction
+        fields = ['id', 'amount', 'type', 'reason', 'payment', 'created_at']
+        read_only_fields = ['id', 'created_at']

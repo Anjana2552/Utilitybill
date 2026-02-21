@@ -40,10 +40,10 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
         final prefs = await SharedPreferences.getInstance();
         final sessionId = prefs.getString('sessionid');
 
-        print(
+        debugPrint(
           'Sending request to: ${ApiConfig.baseUrl}/admin/add-utility-authority/',
         );
-        print('Session ID: $sessionId');
+        debugPrint('Session ID: $sessionId');
 
         final response = await http.post(
           Uri.parse('${ApiConfig.baseUrl}/admin/add-utility-authority/'),
@@ -60,8 +60,8 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
           }),
         );
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+        debugPrint('Response status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
 
         setState(() {
           _isLoading = false;
@@ -70,7 +70,6 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
         if (response.statusCode == 201) {
           final data = json.decode(response.body);
           final password = data['password'];
-          final username = data['username'];
 
           if (!mounted) return;
 
@@ -168,10 +167,10 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Add Utility Authority'),
-        backgroundColor: const Color(0xFF7FD9CE),
+        title: const Text('Add Authority'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -197,20 +196,11 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _nameController,
                   decoration: InputDecoration(
                     labelText: 'Authority Name',
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.business,
-                      color: Color(0xFF4B9A8F),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF7FD9CE),
-                        width: 2,
-                      ),
-                    ),
+                    // Borders inherited from theme InputDecorationTheme
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -225,20 +215,11 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   decoration: InputDecoration(
                     labelText: 'Utility Type',
                     hintText: 'e.g., Water, Electricity, Gas',
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.category,
-                      color: Color(0xFF4B9A8F),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF7FD9CE),
-                        width: 2,
-                      ),
-                    ),
+                    // Borders inherited from theme InputDecorationTheme
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -252,20 +233,11 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _contactController,
                   decoration: InputDecoration(
                     labelText: 'Contact Number',
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.phone,
-                      color: Color(0xFF4B9A8F),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF7FD9CE),
-                        width: 2,
-                      ),
-                    ),
+                    // Borders inherited from theme InputDecorationTheme
                   ),
                   keyboardType: TextInputType.phone,
                   validator: (value) {
@@ -280,20 +252,11 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _emailController,
                   decoration: InputDecoration(
                     labelText: 'Email Address',
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.email,
-                      color: Color(0xFF4B9A8F),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF7FD9CE),
-                        width: 2,
-                      ),
-                    ),
+                    // Borders inherited from theme InputDecorationTheme
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
@@ -311,20 +274,11 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                   controller: _addressController,
                   decoration: InputDecoration(
                     labelText: 'Address',
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.location_on,
-                      color: Color(0xFF4B9A8F),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF7FD9CE),
-                        width: 2,
-                      ),
-                    ),
+                    // Borders inherited from theme InputDecorationTheme
                   ),
                   maxLines: 3,
                   validator: (value) {
@@ -338,7 +292,7 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                 ElevatedButton(
                   onPressed: _isLoading ? null : _submitForm,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7FD9CE),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -367,8 +321,10 @@ class _AddAuthorityFormState extends State<AddAuthorityForm> {
                 OutlinedButton(
                   onPressed: () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF4B9A8F),
-                    side: const BorderSide(color: Color(0xFF7FD9CE)),
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

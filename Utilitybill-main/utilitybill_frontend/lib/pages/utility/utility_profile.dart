@@ -38,6 +38,11 @@ class _UtilityProfilePageState extends State<UtilityProfilePage> {
     return CurvedHeaderPage(
       title: 'Profile',
       headerHeight: 180,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () => Navigator.pop(context),
+        tooltip: 'Back',
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -52,7 +57,7 @@ class _UtilityProfilePageState extends State<UtilityProfilePage> {
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: const Color(0xFF7FD9CE),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     child: Text(
                       _fullName.isNotEmpty ? _fullName[0].toUpperCase() : '?',
                       style: const TextStyle(

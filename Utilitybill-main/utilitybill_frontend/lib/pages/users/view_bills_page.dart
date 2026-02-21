@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../widgets/theme_header.dart';
 import '../../config/api_config.dart';
 import 'add_bill_page.dart';
 
@@ -33,9 +32,17 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       _userName =
-          prefs.getString('full_name') ??
           prefs.getString('user_username') ??
+          prefs.getString('full_name') ??
           '';
+      if (_userName.isEmpty) {
+        setState(() {
+          _items = [];
+          _loading = false;
+          _error = 'Missing user, please login again';
+        });
+        return;
+      }
       final uri = Uri.parse(
         '${ApiConfig.baseUrl}/user-utility/list/?user_name=${Uri.encodeQueryComponent(_userName)}',
       );
@@ -63,23 +70,28 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CurvedHeaderPage(
-        title: 'My Bill',
-        headerHeight: 180,
+      appBar: AppBar(
+        title: const Text('My Bill'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
           tooltip: 'Back',
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh),
             tooltip: 'Reload',
             onPressed: _load,
           ),
         ],
-        titleAlignment: HeaderTitleAlignment.left,
-        child: _buildBody(),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: _buildBody(),
+        ),
       ),
     );
   }
@@ -314,7 +326,7 @@ class _ViewBillsPageState extends State<ViewBillsPage> {
     add('Consumer', it['consumer_number'] as String?);
     add('Water', it['water_connection_number'] as String?);
     add('Gas', it['gas_connection_number'] as String?);
-    add('Wifi', it['wifi_consumer_id'] as String?);
+    add('WiFi', it['wifi_consumer_id'] as String?);
     add('DTH', it['dth_subscriber_id'] as String?);
     add('Plan', it['plan_name'] as String?);
     add('Meter', it['meter_number'] as String?);

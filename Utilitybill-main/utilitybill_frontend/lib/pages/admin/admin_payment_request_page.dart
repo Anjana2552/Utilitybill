@@ -3,6 +3,19 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../widgets/theme_header.dart';
 import '../../config/api_config.dart';
+import '../../services/notifications_service.dart';
+import '../../models/notification_item.dart';
+
+// Normalize utility type to match dashboard provider names
+String _normalizeUtilityType(String utilityType) {
+  final lower = utilityType.toLowerCase();
+  if (lower == 'electricity') return 'kseb';
+  if (lower == 'water') return 'water';
+  if (lower == 'gas') return 'gas';
+  if (lower == 'wifi') return 'wifi';
+  if (lower == 'dth') return 'dth';
+  return lower;
+}
 
 class AdminPaymentRequestPage extends StatefulWidget {
   const AdminPaymentRequestPage({super.key});
@@ -15,6 +28,7 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
   bool _loading = true;
   List<Map<String, dynamic>> _pendingPayments = [];
   Map<String, Map<String, dynamic>> _billById = {}; // bill_id -> bill
+  final _notificationService = NotificationsService();
   
 
   @override
@@ -54,7 +68,7 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
     }
   }
 
-  Future<bool> _updatePaymentStatus(dynamic id, bool approve) async {
+  Future<bool> _updatePaymentStatus(dynamic id, bool approve, String billId) async {
     try {
       final uri = Uri.parse('${ApiConfig.baseUrl}/${approve ? 'payments/approve/' : 'payments/reject/'}');
       final resp = await http.post(
@@ -62,7 +76,56 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'id': id}),
       );
-      return resp.statusCode == 200;
+      
+      if (resp.statusCode == 200) {
+        // Create notifications for user and utility authority
+        final bill = _billById[billId];
+        if (bill != null) {
+          final username = (bill['consumer_name'] ?? '').toString();
+          final rawUtilityType = (bill['utility_type'] ?? '').toString();
+          final utilityType = _normalizeUtilityType(rawUtilityType);
+          final amount = (_pendingPayments.firstWhere(
+            (p) => p['id'] == id,
+            orElse: () => {'amount': '0'},
+          )['amount'] ?? '0').toString();
+          
+          if (username.isNotEmpty) {
+            // Notification for user
+            await _notificationService.addUnique(
+              NotificationItem(
+                id: '${approve ? 'payment_approved' : 'payment_rejected'}_${username}_$billId',
+                type: approve ? 'payment_approved' : 'payment_rejected',
+                title: approve ? 'Payment approved' : 'Payment rejected',
+                message: approve
+                    ? 'Invoice $billId approved • Amount INR $amount'
+                    : 'Invoice $billId was rejected. Amount credited to your wallet.',
+                timestamp: DateTime.now(),
+                username: username,
+                utilityType: utilityType,
+              ),
+            );
+            
+            // Notification for utility authority
+            if (utilityType.isNotEmpty) {
+              await _notificationService.addUnique(
+                NotificationItem(
+                  id: '${approve ? 'payment_approved' : 'payment_rejected'}_utility_${utilityType}_$billId',
+                  type: approve ? 'payment_approved' : 'payment_rejected',
+                  title: approve ? 'Payment Approved' : 'Payment Rejected',
+                  message: approve
+                      ? 'User $username payment approved for Invoice $billId • Amount INR $amount'
+                      : 'User $username payment rejected for Invoice $billId • Amount INR $amount',
+                  timestamp: DateTime.now(),
+                  username: 'utility_$utilityType',
+                  utilityType: utilityType,
+                ),
+              );
+            }
+          }
+        }
+        return true;
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -73,14 +136,11 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
     // Show all pending payments without filters
     final filtered = _pendingPayments;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Payment Request'),
-        backgroundColor: const Color(0xFF7FD9CE),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+      return Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.background,
+        appBar: AppBar(
+          title: const Text('Payment Requests'),
+        ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetchData,
@@ -122,7 +182,10 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.list_alt, color: Color(0xFF4B9A8F)),
+                              Icon(
+                                Icons.list_alt,
+                                color: Theme.of(context).colorScheme.secondary,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
@@ -185,7 +248,7 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
                             children: [
                               TextButton.icon(
                                 onPressed: () async {
-                                  final ok = await _updatePaymentStatus(p['id'], true);
+                                  final ok = await _updatePaymentStatus(p['id'], true, billId);
                                   if (!mounted) return;
                                   if (ok) {
                                     setState(() {
@@ -199,7 +262,7 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
                               const SizedBox(width: 8),
                               TextButton.icon(
                                 onPressed: () async {
-                                  final ok = await _updatePaymentStatus(p['id'], false);
+                                  final ok = await _updatePaymentStatus(p['id'], false, billId);
                                   if (!mounted) return;
                                   if (ok) {
                                     setState(() {

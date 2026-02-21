@@ -28,16 +28,13 @@ class _AddBillPageState extends State<AddBillPage> {
   String? _selectedUtility;
   String? _connectionType;
   String? _wifiSelectedPlan;
-  final Color _accentColor = const Color(0xFF34B3A0);
-  final Color _borderColor = const Color(0xFFE3E8EF);
-  final Color _fillColor = const Color(0xFFF7FAFC);
   String _userName = '';
   int? _editingId;
   static const List<String> _utilityOptions = [
     'Electricity',
     'Water',
     'Gas',
-    'Wifi',
+    'WiFi',
     'DTH',
     'Others',
   ];
@@ -67,7 +64,55 @@ class _AddBillPageState extends State<AddBillPage> {
   void initState() {
     super.initState();
     _loadUserName();
+    _loadHouseNumberFromProfile();
     _prefillIfEditing();
+  }
+
+  Future<void> _loadHouseNumberFromProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      if (token == null || token.isEmpty) {
+        return;
+      }
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/profiles/');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Token $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // Handle both list and single object responses
+        Map<String, dynamic>? profile;
+        
+        if (data is List && data.isNotEmpty) {
+          profile = data[0] as Map<String, dynamic>;
+        } else if (data is Map) {
+          profile = data as Map<String, dynamic>;
+        }
+
+        if (profile != null) {
+          final houseNumber = profile['house_number'] as String?;
+          if (houseNumber != null && 
+              houseNumber.isNotEmpty && 
+              mounted && 
+              _houseNumberCtrl.text.isEmpty) {
+            setState(() {
+              _houseNumberCtrl.text = houseNumber;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      // Silently fail
+    }
   }
 
   void _prefillIfEditing() {
@@ -102,8 +147,8 @@ class _AddBillPageState extends State<AddBillPage> {
   Future<void> _loadUserName() async {
     final prefs = await SharedPreferences.getInstance();
     final name =
-        prefs.getString('full_name') ??
         prefs.getString('user_username') ??
+        prefs.getString('full_name') ??
         'User';
     if (!mounted) return;
     setState(() => _userName = name);
@@ -150,7 +195,7 @@ class _AddBillPageState extends State<AddBillPage> {
         return;
       }
     }
-    if (_selectedUtility == 'Wifi') {
+    if (_selectedUtility == 'WiFi') {
       if (_wifiCustomerIdCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -188,8 +233,9 @@ class _AddBillPageState extends State<AddBillPage> {
     final Map<String, dynamic> payload = {
       'utility_type': utilityValue,
       'provider_name': _providerNameCtrl.text.trim(),
-      // Map house number into meter_number as per backend schema
+      // Map house number into both meter_number (for backward compat) and house_number
       'meter_number': _houseNumberCtrl.text.trim(),
+      'house_number': _houseNumberCtrl.text.trim(),
       'user_name': _userName,
     };
     if (_selectedUtility == 'Electricity') {
@@ -203,7 +249,7 @@ class _AddBillPageState extends State<AddBillPage> {
     if (_selectedUtility == 'Gas') {
       payload['gas_connection_number'] = _gasConsumerIdCtrl.text.trim();
     }
-    if (_selectedUtility == 'Wifi') {
+    if (_selectedUtility == 'WiFi') {
       payload['wifi_consumer_id'] = _wifiCustomerIdCtrl.text.trim();
       if (_wifiSelectedPlan != null) payload['plan_name'] = _wifiSelectedPlan;
     }
@@ -269,7 +315,7 @@ class _AddBillPageState extends State<AddBillPage> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -309,7 +355,9 @@ class _AddBillPageState extends State<AddBillPage> {
             children: [
               pill(
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedUtility,
+                  initialValue: _utilityOptions.contains(_selectedUtility)
+                      ? _selectedUtility
+                      : null,
                   decoration: pillDecoration(
                     'Utility Type',
                     Icons.category_outlined,
@@ -361,7 +409,9 @@ class _AddBillPageState extends State<AddBillPage> {
               if (_selectedUtility == 'Electricity')
                 pill(
                   DropdownButtonFormField<String>(
-                    initialValue: _connectionType,
+                    initialValue: _connectionTypeOptions.contains(_connectionType)
+                        ? _connectionType
+                        : null,
                     decoration: pillDecoration(
                       'Connection Type',
                       Icons.power_outlined,
@@ -388,7 +438,9 @@ class _AddBillPageState extends State<AddBillPage> {
               if (_selectedUtility == 'Water')
                 pill(
                   DropdownButtonFormField<String>(
-                    initialValue: _connectionType,
+                    initialValue: _connectionTypeOptions.contains(_connectionType)
+                        ? _connectionType
+                        : null,
                     decoration: pillDecoration(
                       'Connection Type',
                       Icons.power_outlined,
@@ -411,7 +463,7 @@ class _AddBillPageState extends State<AddBillPage> {
                   ),
                 ),
               if (_selectedUtility == 'Gas') const SizedBox(height: 12),
-              if (_selectedUtility == 'Wifi')
+              if (_selectedUtility == 'WiFi')
                 pill(
                   TextFormField(
                     controller: _wifiCustomerIdCtrl,
@@ -421,11 +473,13 @@ class _AddBillPageState extends State<AddBillPage> {
                     ),
                   ),
                 ),
-              if (_selectedUtility == 'Wifi') const SizedBox(height: 12),
-              if (_selectedUtility == 'Wifi')
+              if (_selectedUtility == 'WiFi') const SizedBox(height: 12),
+              if (_selectedUtility == 'WiFi')
                 pill(
                   DropdownButtonFormField<String>(
-                    initialValue: _wifiSelectedPlan,
+                    initialValue: _wifiPlanOptions.contains(_wifiSelectedPlan)
+                        ? _wifiSelectedPlan
+                        : null,
                     decoration: pillDecoration('Selected Plan', Icons.wifi),
                     items: _wifiPlanOptions
                         .map((t) => DropdownMenuItem(value: t, child: Text(t)))
@@ -433,7 +487,7 @@ class _AddBillPageState extends State<AddBillPage> {
                     onChanged: (v) => setState(() => _wifiSelectedPlan = v),
                   ),
                 ),
-              if (_selectedUtility == 'Wifi') const SizedBox(height: 12),
+              if (_selectedUtility == 'WiFi') const SizedBox(height: 12),
               if (_selectedUtility == 'DTH')
                 pill(
                   TextFormField(
@@ -491,10 +545,7 @@ class _AddBillPageState extends State<AddBillPage> {
                       onPressed: _onSave,
                       icon: const Icon(Icons.save_outlined),
                       label: const Text('Save'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF34B3A0),
-                        foregroundColor: Colors.white,
-                      ),
+                      // Use global ElevatedButton theme colors
                     ),
                   ),
                 ],

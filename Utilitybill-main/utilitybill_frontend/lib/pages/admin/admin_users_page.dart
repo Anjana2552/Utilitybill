@@ -257,12 +257,9 @@ class _AdminUsersListPageState extends State<AdminUsersListPage> {
           }).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
         title: const Text('Users'),
-        backgroundColor: const Color(0xFF7FD9CE),
-        foregroundColor: Colors.white,
-        elevation: 0,
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -285,7 +282,7 @@ class _AdminUsersListPageState extends State<AdminUsersListPage> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.search, color: Color(0xFF34B3A0)),
+                          Icon(Icons.search, color: Theme.of(context).colorScheme.primary),
                           const SizedBox(width: 8),
                           Expanded(
                             child: TextField(
@@ -356,9 +353,9 @@ class _AdminUsersListPageState extends State<AdminUsersListPage> {
                           children: [
                             Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.person_outline,
-                                  color: Color(0xFF34B3A0),
+                                  color: Theme.of(context).colorScheme.secondary,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(

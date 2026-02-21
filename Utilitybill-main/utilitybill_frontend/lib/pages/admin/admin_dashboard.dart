@@ -11,6 +11,7 @@ import 'admin_users_page.dart';
 import '../bills_page.dart';
 import '../payment_reports_page.dart';
 import 'admin_payment_request_page.dart';
+import 'admin_reviews_page.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -37,7 +38,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _handleLogout() async {
     final prefs = await SharedPreferences.getInstance();
+    final reviews = prefs.getString('saved_reviews_v1');
+    final notifications = prefs.getString('notifications_list_v1');
     await prefs.clear();
+    if (reviews != null && reviews.isNotEmpty) {
+      await prefs.setString('saved_reviews_v1', reviews);
+    }
+    if (notifications != null && notifications.isNotEmpty) {
+      await prefs.setString('notifications_list_v1', notifications);
+    }
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/');
   }
@@ -54,18 +63,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
         }
       },
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.background,
         body: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: _pages[_selectedIndex],
         ),
         drawer: Drawer(
           child: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFF7FD9CE), Color(0xFF4B9A8F)],
+                colors: [
+                  Theme.of(context).colorScheme.primaryContainer,
+                  Theme.of(context).colorScheme.primary,
+                ],
               ),
             ),
             child: ListView(
@@ -89,10 +101,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             ),
                           ],
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.admin_panel_settings,
                           size: 50,
-                          color: Color(0xFF4B9A8F),
+                          color: Theme.of(context).colorScheme.secondary,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -199,6 +211,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   },
                 ),
                 ListTile(
+                  leading: const Icon(
+                    Icons.rate_review,
+                    color: Colors.white,
+                  ),
+                  title: const Text(
+                    'Reviews',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminReviewsPage(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
                   leading: const Icon(Icons.person, color: Colors.white),
                   title: const Text(
                     'Profile',
@@ -242,6 +273,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
   int _totalBillsCount = 0;
   int _totalPaymentsCount = 0;
   bool _loadingCounts = true;
+  bool _loadingPending = true;
+  List<Map<String, dynamic>> _pendingPayments = [];
+  Map<String, Map<String, dynamic>> _billById = {}; // bill_id -> bill
+  bool _refreshing = false;
 
   @override
   void initState() {
@@ -250,7 +285,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Future<void> _fetchCounts() async {
-    setState(() => _loadingCounts = true);
+    setState(() {
+      _loadingCounts = true;
+      _refreshing = true;
+    });
     try {
       final uri = Uri.parse('${ApiConfig.baseUrl}/profiles/');
       final prefs = await SharedPreferences.getInstance();
@@ -327,15 +365,51 @@ class _AdminHomePageState extends State<AdminHomePage> {
           if (mounted) setState(() => _totalPaymentsCount = results.length);
         }
       } catch (_) {}
+      // Fetch pending payments (for dashboard preview)
+      try {
+        setState(() => _loadingPending = true);
+        final payUri = Uri.parse('${ApiConfig.baseUrl}/payments/list/?status=pending');
+        final payResp = await http.get(
+          payUri,
+          headers: {'Content-Type': 'application/json'},
+        );
+        if (payResp.statusCode == 200) {
+          final obj = jsonDecode(payResp.body) as Map<String, dynamic>;
+          final List<dynamic> results =
+              (obj['results'] as List<dynamic>?) ?? const [];
+          _pendingPayments = results.cast<Map<String, dynamic>>();
+        }
+        // Enrich with bill details
+        final utilUri = Uri.parse('${ApiConfig.baseUrl}/utility-bill/list/');
+        final utilResp = await http.get(
+          utilUri,
+          headers: {'Content-Type': 'application/json'},
+        );
+        if (utilResp.statusCode == 200) {
+          final uobj = jsonDecode(utilResp.body) as Map<String, dynamic>;
+          final List<dynamic> uresults =
+              (uobj['results'] as List<dynamic>?) ?? const [];
+          _billById.clear();
+          for (final b in uresults) {
+            final bid = (b['bill_id'] ?? '').toString();
+            if (bid.isNotEmpty) _billById[bid] = b as Map<String, dynamic>;
+          }
+        }
+        if (mounted) setState(() => _loadingPending = false);
+      } catch (_) {
+        if (mounted) setState(() => _loadingPending = false);
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingCounts = false);
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.background,
       child: SafeArea(
         child: Stack(
           children: [
@@ -362,7 +436,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   value: _loadingCounts
                                       ? '—'
                                       : _usersCount.toString(),
-                                  color: const Color(0xFF34B3A0),
+                                  color: Theme.of(context).colorScheme.primary,
                                   icon: Icons.people_outline,
                                   onTap: () {
                                     Navigator.push(
@@ -382,7 +456,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   value: _loadingCounts
                                       ? '—'
                                       : _authoritiesCount.toString(),
-                                  color: const Color(0xFF4B9A8F),
+                                  color: Theme.of(context).colorScheme.secondary,
                                   icon: Icons.account_balance_outlined,
                                   onTap: () {
                                     Navigator.push(
@@ -415,7 +489,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   value: _loadingCounts
                                       ? '—'
                                       : _totalBillsCount.toString(),
-                                  color: const Color(0xFF7FD9CE),
+                                  color: Theme.of(context).colorScheme.primary,
                                   icon: Icons.receipt_long,
                                   onTap: () {
                                     Navigator.push(
@@ -450,6 +524,109 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      // Pending requests preview
+                      Row(
+                        children: [
+                          const Text(
+                            'Pending Requests',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const AdminPaymentRequestPage(),
+                                ),
+                              );
+                            },
+                            child: const Text('See All'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_loadingPending)
+                        const Center(child: CircularProgressIndicator())
+                      else if (_pendingPayments.isEmpty)
+                        Card(
+                          elevation: 1,
+                          child: ListTile(
+                            leading: const Icon(Icons.inbox_outlined),
+                            title: const Text('No pending requests'),
+                            subtitle: const Text('New approval requests appear here'),
+                            trailing: TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const AdminPaymentRequestPage(),
+                                  ),
+                                );
+                              },
+                              child: const Text('Open'),
+                            ),
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _pendingPayments.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final p = _pendingPayments[index];
+                            final billId = (p['bill_id'] ?? '').toString();
+                            final shortId = billId.isEmpty
+                                ? '--'
+                                : (billId.length > 4
+                                    ? billId.substring(billId.length - 4)
+                                    : billId);
+                            final bill = _billById[billId];
+                            final utility = (bill?['utility_type'] ?? '')
+                                .toString();
+                            final amount = (p['amount'] ?? '').toString();
+                            final date = (p['payment_date'] ?? '').toString();
+                            return Card(
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: ListTile(
+                                leading: Icon(Icons.list_alt,
+                                  color: Theme.of(context).colorScheme.secondary),
+                                title: Text('Bill #$shortId'),
+                                subtitle: Text(
+                                  utility.isEmpty ? date : '$utility • $date',
+                                ),
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade700
+                                        .withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    amount.isEmpty ? '₹ --' : '₹ $amount',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF2D3142)),
+                                  ),
+                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AdminPaymentRequestPage(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
                     ],
                   ),
                 ),
@@ -470,16 +647,35 @@ class _AdminHomePageState extends State<AdminHomePage> {
             Positioned(
               top: 16,
               right: 16,
-              child: IconButton(
-                icon: const Icon(Icons.add, color: Colors.white, size: 28),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AddAuthorityForm(),
-                    ),
-                  );
-                },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Refresh',
+                    onPressed: _refreshing ? null : _fetchCounts,
+                    icon: _refreshing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.refresh, color: Colors.white, size: 26),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add, color: Colors.white, size: 28),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AddAuthorityForm(),
+                        ),
+                      ).then((_) => _fetchCounts());
+                    },
+                  ),
+                ],
               ),
             ),
           ],

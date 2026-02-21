@@ -9,6 +9,11 @@ import 'bill_payment.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../config/api_config.dart';
+import '../notifications.dart';
+import '../../services/notifications_service.dart';
+import '../../services/notification_generator.dart';
+import 'rewards_page.dart';
+// Theme toggling removed; single theme app
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,69 +25,32 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   String _fullName = '';
-  ImageProvider? _profileImage;
   Map<String, dynamic>? _latestBill; // latest bill for this user
   bool _loadingLatestBill = false;
+  int _unreadNotifCount = 0;
+  String? _walletBalance; // user's wallet balance
+  bool _loadingWallet = false;
 
   @override
   void initState() {
     super.initState();
     _loadName();
     _loadLatestBill();
+    _loadUnreadNotifications();
+    _loadWalletBalance();
   }
 
-  void _showChangePhotoSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Image picker not set up yet'),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera_outlined),
-                title: const Text('Take a Photo'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Camera not set up yet')),
-                  );
-                },
-              ),
-              if (_profileImage != null)
-                ListTile(
-                  leading: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.redAccent,
-                  ),
-                  title: const Text('Remove Photo'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    setState(() => _profileImage = null);
-                  },
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
+  Future<void> _loadUnreadNotifications() async {
+    try {
+      final generator = NotificationGenerator();
+      await generator.generateAllNotifications();
+      final svc = NotificationsService();
+      final c = await svc.unreadCount();
+      if (mounted) setState(() => _unreadNotifCount = c);
+    } catch (_) {}
   }
+
+  // Theme picker removed
 
   Future<void> _loadName() async {
     final prefs = await SharedPreferences.getInstance();
@@ -106,6 +74,24 @@ class _HomePageState extends State<HomePage> {
         setState(() => _loadingLatestBill = false);
         return;
       }
+      // Fetch set of approved (paid) bill IDs to exclude from latest bill
+      final Set<String> approvedBillIds = <String>{};
+      try {
+        final paidResp = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/payments/list/?status=approved'),
+          headers: {'Content-Type': 'application/json'},
+        );
+        if (paidResp.statusCode == 200) {
+          final pobj = jsonDecode(paidResp.body) as Map<String, dynamic>;
+          final List<dynamic> presults =
+              (pobj['results'] as List<dynamic>?) ?? const [];
+          for (final p in presults) {
+            final id = ((p as Map<String, dynamic>)['bill_id'] ?? '')
+                .toString();
+            if (id.isNotEmpty) approvedBillIds.add(id);
+          }
+        }
+      } catch (_) {}
       final utilUri = Uri.parse(
         '${ApiConfig.baseUrl}/user-utility/list/?user_name=${Uri.encodeQueryComponent(username)}',
       );
@@ -117,8 +103,8 @@ class _HomePageState extends State<HomePage> {
       final List<dynamic> utilities =
           (utilJson['results'] as List<dynamic>?) ?? const [];
 
-      Map<String, dynamic>? mostRecent;
-      DateTime? mostRecentCreated;
+      Map<String, dynamic>? earliestDueBill;
+      DateTime? earliestDue;
 
       for (final u in utilities) {
         final type = (u['utility_type'] ?? '').toString().toLowerCase();
@@ -140,17 +126,26 @@ class _HomePageState extends State<HomePage> {
                 (obj['results'] as List<dynamic>?) ?? const [];
             if (results.isNotEmpty) {
               final bill = results.first as Map<String, dynamic>;
-              final createdStr = (bill['created_at'] ?? '') as String;
-              DateTime created;
-              try {
-                created = DateTime.parse(createdStr);
-              } catch (_) {
-                created = DateTime.now();
-              }
-              if (mostRecentCreated == null ||
-                  created.isAfter(mostRecentCreated)) {
-                mostRecentCreated = created;
-                mostRecent = bill;
+              final id = (bill['bill_id'] ?? '').toString();
+              if (id.isEmpty || approvedBillIds.contains(id)) {
+                // skip paid or invalid bill
+              } else {
+                final dueStr =
+                    (bill['due_date'] ??
+                            bill['expiry_date'] ??
+                            bill['created_at'] ??
+                            '')
+                        as String;
+                DateTime due;
+                try {
+                  due = DateTime.parse(dueStr);
+                } catch (_) {
+                  due = DateTime.now();
+                }
+                if (earliestDue == null || due.isBefore(earliestDue)) {
+                  earliestDue = due;
+                  earliestDueBill = bill;
+                }
               }
             }
           }
@@ -173,17 +168,26 @@ class _HomePageState extends State<HomePage> {
                 (obj['results'] as List<dynamic>?) ?? const [];
             if (results.isNotEmpty) {
               final bill = results.first as Map<String, dynamic>;
-              final createdStr = (bill['created_at'] ?? '') as String;
-              DateTime created;
-              try {
-                created = DateTime.parse(createdStr);
-              } catch (_) {
-                created = DateTime.now();
-              }
-              if (mostRecentCreated == null ||
-                  created.isAfter(mostRecentCreated)) {
-                mostRecentCreated = created;
-                mostRecent = bill;
+              final id = (bill['bill_id'] ?? '').toString();
+              if (id.isEmpty || approvedBillIds.contains(id)) {
+                // skip paid or invalid bill
+              } else {
+                final dueStr =
+                    (bill['due_date'] ??
+                            bill['expiry_date'] ??
+                            bill['created_at'] ??
+                            '')
+                        as String;
+                DateTime due;
+                try {
+                  due = DateTime.parse(dueStr);
+                } catch (_) {
+                  due = DateTime.now();
+                }
+                if (earliestDue == null || due.isBefore(earliestDue)) {
+                  earliestDue = due;
+                  earliestDueBill = bill;
+                }
               }
             }
           }
@@ -205,17 +209,26 @@ class _HomePageState extends State<HomePage> {
                 (obj['results'] as List<dynamic>?) ?? const [];
             if (results.isNotEmpty) {
               final bill = results.first as Map<String, dynamic>;
-              final createdStr = (bill['created_at'] ?? '') as String;
-              DateTime created;
-              try {
-                created = DateTime.parse(createdStr);
-              } catch (_) {
-                created = DateTime.now();
-              }
-              if (mostRecentCreated == null ||
-                  created.isAfter(mostRecentCreated)) {
-                mostRecentCreated = created;
-                mostRecent = bill;
+              final id = (bill['bill_id'] ?? '').toString();
+              if (id.isEmpty || approvedBillIds.contains(id)) {
+                // skip paid or invalid bill
+              } else {
+                final dueStr =
+                    (bill['due_date'] ??
+                            bill['expiry_date'] ??
+                            bill['created_at'] ??
+                            '')
+                        as String;
+                DateTime due;
+                try {
+                  due = DateTime.parse(dueStr);
+                } catch (_) {
+                  due = DateTime.now();
+                }
+                if (earliestDue == null || due.isBefore(earliestDue)) {
+                  earliestDue = due;
+                  earliestDueBill = bill;
+                }
               }
             }
           }
@@ -237,17 +250,26 @@ class _HomePageState extends State<HomePage> {
                 (obj['results'] as List<dynamic>?) ?? const [];
             if (results.isNotEmpty) {
               final bill = results.first as Map<String, dynamic>;
-              final createdStr = (bill['created_at'] ?? '') as String;
-              DateTime created;
-              try {
-                created = DateTime.parse(createdStr);
-              } catch (_) {
-                created = DateTime.now();
-              }
-              if (mostRecentCreated == null ||
-                  created.isAfter(mostRecentCreated)) {
-                mostRecentCreated = created;
-                mostRecent = bill;
+              final id = (bill['bill_id'] ?? '').toString();
+              if (id.isEmpty || approvedBillIds.contains(id)) {
+                // skip paid or invalid bill
+              } else {
+                final dueStr =
+                    (bill['due_date'] ??
+                            bill['expiry_date'] ??
+                            bill['created_at'] ??
+                            '')
+                        as String;
+                DateTime due;
+                try {
+                  due = DateTime.parse(dueStr);
+                } catch (_) {
+                  due = DateTime.now();
+                }
+                if (earliestDue == null || due.isBefore(earliestDue)) {
+                  earliestDue = due;
+                  earliestDueBill = bill;
+                }
               }
             }
           }
@@ -269,17 +291,21 @@ class _HomePageState extends State<HomePage> {
                 (obj['results'] as List<dynamic>?) ?? const [];
             if (results.isNotEmpty) {
               final bill = results.first as Map<String, dynamic>;
-              final createdStr = (bill['created_at'] ?? '') as String;
-              DateTime created;
+              final dueStr =
+                  (bill['due_date'] ??
+                          bill['expiry_date'] ??
+                          bill['created_at'] ??
+                          '')
+                      as String;
+              DateTime due;
               try {
-                created = DateTime.parse(createdStr);
+                due = DateTime.parse(dueStr);
               } catch (_) {
-                created = DateTime.now();
+                due = DateTime.now();
               }
-              if (mostRecentCreated == null ||
-                  created.isAfter(mostRecentCreated)) {
-                mostRecentCreated = created;
-                mostRecent = bill;
+              if (earliestDue == null || due.isBefore(earliestDue)) {
+                earliestDue = due;
+                earliestDueBill = bill;
               }
             }
           }
@@ -301,23 +327,33 @@ class _HomePageState extends State<HomePage> {
             (obj['results'] as List<dynamic>?) ?? const [];
         if (results.isEmpty) continue;
         final bill = results.first as Map<String, dynamic>;
-        final createdStr =
-            (bill['created_at'] ?? bill['reading_date'] ?? '') as String;
-        DateTime created;
-        try {
-          created = DateTime.parse(createdStr);
-        } catch (_) {
-          created = DateTime.now();
+        final bid = (bill['bill_id'] ?? '').toString();
+        if (bid.isEmpty || approvedBillIds.contains(bid)) {
+          // skip paid or invalid bill
+          continue;
         }
-        if (mostRecentCreated == null || created.isAfter(mostRecentCreated)) {
-          mostRecentCreated = created;
-          mostRecent = bill;
+        final dueStr =
+            (bill['due_date'] ??
+                    bill['expiry_date'] ??
+                    bill['created_at'] ??
+                    bill['reading_date'] ??
+                    '')
+                as String;
+        DateTime due;
+        try {
+          due = DateTime.parse(dueStr);
+        } catch (_) {
+          due = DateTime.now();
+        }
+        if (earliestDue == null || due.isBefore(earliestDue)) {
+          earliestDue = due;
+          earliestDueBill = bill;
         }
       }
 
       if (mounted) {
         setState(() {
-          _latestBill = mostRecent;
+          _latestBill = earliestDueBill;
           _loadingLatestBill = false;
         });
       }
@@ -326,9 +362,45 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _loadWalletBalance() async {
+    setState(() => _loadingWallet = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final username = prefs.getString('user_username') ?? '';
+      if (username.isEmpty) {
+        setState(() => _loadingWallet = false);
+        return;
+      }
+      final balUri = Uri.parse(
+        '${ApiConfig.baseUrl}/wallet/balance/?username=${Uri.encodeQueryComponent(username)}',
+      );
+      final resp = await http.get(
+        balUri,
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (resp.statusCode == 200) {
+        final obj = jsonDecode(resp.body) as Map<String, dynamic>;
+        final bal = (obj['balance'] ?? '0.00').toString();
+        if (mounted) setState(() => _walletBalance = bal);
+      }
+    } catch (_) {
+      // ignore errors; keep default
+    } finally {
+      if (mounted) setState(() => _loadingWallet = false);
+    }
+  }
+
   Future<void> _handleLogout() async {
     final prefs = await SharedPreferences.getInstance();
+    final reviews = prefs.getString('saved_reviews_v1');
+    final notifications = prefs.getString('notifications_list_v1');
     await prefs.clear();
+    if (reviews != null && reviews.isNotEmpty) {
+      await prefs.setString('saved_reviews_v1', reviews);
+    }
+    if (notifications != null && notifications.isNotEmpty) {
+      await prefs.setString('notifications_list_v1', notifications);
+    }
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/');
   }
@@ -345,12 +417,12 @@ class _HomePageState extends State<HomePage> {
       const _ProfileTab(),
     ];
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leading: Builder(
           builder: (ctx) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
+            icon: const Icon(Icons.menu),
             onPressed: () => Scaffold.of(ctx).openDrawer(),
             tooltip: 'Menu',
           ),
@@ -360,35 +432,80 @@ class _HomePageState extends State<HomePage> {
               ? 'Welcome back, $_fullName'
               : _currentIndex == 1
               ? 'Payments'
-              : 'Profile',
+              : 'My Bills',
         ),
         actions: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none),
+                tooltip: 'Notifications',
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationsPage(),
+                    ),
+                  );
+                  await _loadUnreadNotifications();
+                },
+              ),
+              if (_unreadNotifCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 18),
+                    child: Text(
+                      _unreadNotifCount > 9 ? '9+' : '$_unreadNotifCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          // Theme toggle removed
           IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.white),
-            tooltip: 'Notifications',
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Profile',
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Notifications coming soon')),
+              // Ensure when returning from Profile, Home tab is shown.
+              setState(() => _currentIndex = 0);
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const UserProfilePage()),
               );
             },
           ),
         ],
-        backgroundColor: const Color(0xFF7FD9CE),
-        foregroundColor: Colors.white,
         elevation: 0,
       ),
       drawer: Drawer(
         child: SafeArea(
           child: ListView(
             children: [
-              const DrawerHeader(
-                decoration: BoxDecoration(color: Color(0xFF7FD9CE)),
+              DrawerHeader(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 child: Align(
                   alignment: Alignment.bottomLeft,
                   child: Text(
                     'Menu',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.onPrimary,
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
@@ -446,11 +563,7 @@ class _HomePageState extends State<HomePage> {
                 title: const Text('Payment History'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Payment History coming soon'),
-                    ),
-                  );
+                  Navigator.pushNamed(context, '/user/payment_history');
                 },
               ),
               ListTile(
@@ -458,6 +571,8 @@ class _HomePageState extends State<HomePage> {
                 title: const Text('Profile'),
                 onTap: () {
                   Navigator.of(context).pop();
+                  // Ensure Home tab is selected when returning from Profile.
+                  setState(() => _currentIndex = 0);
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const UserProfilePage()),
                   );
@@ -479,12 +594,12 @@ class _HomePageState extends State<HomePage> {
           children: [
             BlueGreenHeader(
               height: 220,
-              overlay: _currentIndex == 2
-                  ? _AvatarEdit(
-                      image: _profileImage,
-                      onTap: _showChangePhotoSheet,
-                    )
-                  : null,
+              overlayYOffset: -30,
+              title: 'My Wallet',
+              subtitle: _loadingWallet
+                  ? 'Loading...'
+                  : '₹ ${_walletBalance ?? '0.00'}',
+              titleAlignment: HeaderTitleAlignment.left,
             ),
             // No spacer needed when avatar is centered in the header
             Expanded(
@@ -505,7 +620,13 @@ class _HomePageState extends State<HomePage> {
                 },
                 child: Container(
                   key: ValueKey<int>(_currentIndex),
-                  color: Colors.white,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(18),
+                      topRight: Radius.circular(18),
+                    ),
+                  ),
                   child: tabs[_currentIndex],
                 ),
               ),
@@ -515,25 +636,46 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: CurvedNavigationBar(
         index: _currentIndex,
-        items: const [
-          Icon(Icons.home, size: 26, color: Colors.white),
-          Icon(Icons.payment, size: 26, color: Colors.white),
-          Icon(Icons.person, size: 26, color: Colors.white),
+        items: [
+          Icon(
+            Icons.home,
+            size: 26,
+            color: Theme.of(context).colorScheme.onPrimary,
+          ),
+          Icon(
+            Icons.payment,
+            size: 26,
+            color: Theme.of(context).colorScheme.onPrimary,
+          ),
+          Icon(
+            Icons.receipt_long,
+            size: 26,
+            color: Theme.of(context).colorScheme.onPrimary,
+          ),
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 26,
+            color: Theme.of(context).colorScheme.onPrimary,
+          ),
         ],
-        color: const Color(0xFF7FD9CE),
-        buttonBackgroundColor: const Color(0xFF4B9A8F),
-        backgroundColor: Colors.white,
+        color: Theme.of(context).colorScheme.primary,
+        buttonBackgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         animationCurve: Curves.easeInOut,
         animationDuration: const Duration(milliseconds: 300),
         onTap: (index) {
           if (index == 2) {
             Navigator.of(
               context,
-            ).push(MaterialPageRoute(builder: (_) => const UserProfilePage()));
+            ).push(MaterialPageRoute(builder: (_) => const ViewBillsPage()));
             return;
           }
           if (index == 1) {
             Navigator.pushNamed(context, '/user/bill_payment');
+            return;
+          }
+          if (index == 3) {
+            Navigator.pushNamed(context, '/user/chat');
             return;
           }
           setState(() => _currentIndex = index);
@@ -561,32 +703,164 @@ class _HomeTab extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'Latest Bill',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            'Quick Actions',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 8),
-          if (loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(),
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: 16,
+            children: [
+              _RoundAction(
+                label: 'Add Bill',
+                icon: Icons.playlist_add,
+                color: const Color(0xFF42A5F5), // blue
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AddBillPage()),
+                  );
+                },
               ),
-            )
-          else if (latestBill == null)
+              _RoundAction(
+                label: 'View Bills',
+                icon: Icons.visibility,
+                color: const Color(0xFFAB47BC), // purple
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ViewBillsPage()),
+                  );
+                },
+              ),
+              _RoundAction(
+                label: 'Payment History',
+                icon: Icons.history,
+                color: const Color(0xFFFFA726), // orange
+                onTap: () {
+                  Navigator.pushNamed(context, '/user/payment_history');
+                },
+              ),
+              _RoundAction(
+                label: 'My Rewards',
+                icon: Icons.card_giftcard,
+                color: Theme.of(context).colorScheme.primary,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const RewardsPage()),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          if (latestBill != null) ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Upcoming Bill',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/user/bill_payment'),
+                  child: const Text('Read more'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _BillCard(bill: latestBill!),
+          ] else ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Upcoming Bill',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/user/bill_payment'),
+                  child: const Text('Read more'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Card(
               elevation: 1,
-              child: ListTile(
-                leading: const Icon(Icons.receipt_long),
-                title: const Text('No bills yet'),
-                subtitle: const Text(
-                  'Bills generated by utility will appear here',
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'No upcoming bills',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    SizedBox(height: 6),
+                    Text('Add a bill to get reminders and track payments.'),
+                  ],
                 ),
               ),
-            )
-          else
-            _BillCard(bill: latestBill!),
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _RoundAction extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _RoundAction({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(40),
+          child: Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -605,7 +879,10 @@ class _BillCard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        leading: const Icon(Icons.receipt_long, color: Colors.teal),
+        leading: Icon(
+          Icons.receipt_long,
+          color: Theme.of(context).colorScheme.primary,
+        ),
         title: Text('Invoice $billId'),
         subtitle: Text(
           dateText.isEmpty
@@ -632,14 +909,14 @@ class _ProfileTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF4B9A8F);
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       children: [
         Card(
           elevation: 1,
           child: ListTile(
-            leading: const Icon(Icons.person_outline, color: accent),
+            leading: Icon(Icons.person_outline, color: scheme.secondary),
             title: const Text('Personal Details'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _soon(context, 'Personal Details'),
@@ -648,7 +925,7 @@ class _ProfileTab extends StatelessWidget {
         Card(
           elevation: 1,
           child: ListTile(
-            leading: const Icon(Icons.credit_card_outlined, color: accent),
+            leading: Icon(Icons.credit_card_outlined, color: scheme.secondary),
             title: const Text('Payment Details'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _soon(context, 'Payment Details'),
@@ -657,7 +934,7 @@ class _ProfileTab extends StatelessWidget {
         Card(
           elevation: 1,
           child: ListTile(
-            leading: const Icon(Icons.settings_outlined, color: accent),
+            leading: Icon(Icons.settings_outlined, color: scheme.secondary),
             title: const Text('Settings'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _soon(context, 'Settings'),
@@ -665,14 +942,14 @@ class _ProfileTab extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Card(
-          color: Color(0xFFFFF1F1),
+          color: scheme.errorContainer,
           elevation: 0,
           child: ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text(
+            title: Text(
               'Logout',
               style: TextStyle(
-                color: Colors.redAccent,
+                color: scheme.onErrorContainer,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -684,54 +961,4 @@ class _ProfileTab extends StatelessWidget {
   }
 }
 
-class _AvatarEdit extends StatelessWidget {
-  final ImageProvider? image;
-  final VoidCallback onTap;
-  const _AvatarEdit({required this.image, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            CircleAvatar(
-              radius: 36,
-              backgroundColor: const Color(0xFFB2E8E1),
-              backgroundImage: image,
-              child: image == null
-                  ? const Icon(Icons.person, size: 36, color: Colors.white)
-                  : null,
-            ),
-            Positioned(
-              right: -2,
-              bottom: -2,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4B9A8F),
-                  shape: BoxShape.circle,
-                ),
-                padding: const EdgeInsets.all(6),
-                child: const Icon(Icons.edit, size: 16, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// Unused overlay and avatar edit widgets removed

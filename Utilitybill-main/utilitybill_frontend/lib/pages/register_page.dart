@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -90,16 +91,25 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       if (resp.statusCode == 201) {
+        // Trigger OTP generation and show dialog for input
+        final otpResp = await http.post(
+          Uri.parse('${ApiConfig.baseUrl}/auth/request-otp/'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email}),
+        );
         setState(() {
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration successful. Please login.'),
-            backgroundColor: Color(0xFF4B9A8F),
-          ),
-        );
-        Navigator.pushReplacementNamed(context, '/login');
+        if (otpResp.statusCode == 200) {
+          await _showOtpDialog(email);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to generate OTP'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } else {
         // Try to extract error details
         String message = 'Registration failed';
@@ -130,12 +140,101 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  Future<void> _showOtpDialog(String email) async {
+    final controller = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('OTP Verification'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter the 6-digit OTP sent (printed in backend).'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  hintText: '123456',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final code = controller.text.trim();
+                if (code.length != 6) return;
+                try {
+                  final verifyResp = await http.post(
+                    Uri.parse('${ApiConfig.baseUrl}/auth/verify-otp/'),
+                    headers: {'Content-Type': 'application/json'},
+                    body: jsonEncode({'email': email, 'otp': code}),
+                  );
+                  if (verifyResp.statusCode == 200) {
+                    Navigator.pop(ctx, true);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Invalid or expired OTP'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } catch (_) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Network error verifying OTP'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Verify'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == true) {
+      // Persist minimal user info so Home page can greet properly
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final atIndex = email.indexOf('@');
+        final username = atIndex > 0 ? email.substring(0, atIndex) : email;
+        final fullName = _fullNameController.text.trim();
+        await prefs.setString('user_email', email);
+        await prefs.setString('user_username', username);
+        await prefs.setString('user_role', 'user');
+        if (fullName.isNotEmpty) {
+          await prefs.setString('full_name', fullName);
+        }
+      } catch (_) {}
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Registration successful'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+      Navigator.pushReplacementNamed(context, '/home');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     var heightOfScreen = MediaQuery.of(context).size.height;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
+        return Scaffold(
+          backgroundColor: Theme.of(context).colorScheme.background,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -145,7 +244,7 @@ class _RegisterPageState extends State<RegisterPage> {
               clipper: CurvedBottomClipper(),
               child: Container(
                 height: heightOfScreen * 0.35,
-                decoration: const BoxDecoration(color: Color(0xFF7FD9CE)),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
                 child: Stack(
                   children: [
                     // Back button at top-left
@@ -212,41 +311,60 @@ class _RegisterPageState extends State<RegisterPage> {
                   children: [
                     const SizedBox(height: 24),
                     // Full Name Field
-                    const Text(
+                    Text(
                       'Full Name',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF4B9A8F),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _fullNameController,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF9CA3AF),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       decoration: InputDecoration(
                         hintText: 'johndoe',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFFD1D5DB),
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 16,
                         ),
-                        enabledBorder: const UnderlineInputBorder(
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFFE5E7EB),
+                            color: Theme.of(context).colorScheme.outlineVariant,
                             width: 1,
                           ),
                         ),
-                        focusedBorder: const UnderlineInputBorder(
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFF4B9A8F),
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                            width: 1.5,
+                          ),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
                             width: 2,
                           ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
+                          horizontal: 16,
+                          vertical: 16,
                         ),
                       ),
                       validator: (value) {
@@ -258,42 +376,61 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     const SizedBox(height: 24),
                     // Email Field
-                    const Text(
+                    Text(
                       'Email',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF4B9A8F),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF9CA3AF),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       decoration: InputDecoration(
                         hintText: 'example@gmail.com',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFFD1D5DB),
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 16,
                         ),
-                        enabledBorder: const UnderlineInputBorder(
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFFE5E7EB),
+                            color: Theme.of(context).colorScheme.outlineVariant,
                             width: 1,
                           ),
                         ),
-                        focusedBorder: const UnderlineInputBorder(
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFF4B9A8F),
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                            width: 1.5,
+                          ),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
                             width: 2,
                           ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
+                          horizontal: 16,
+                          vertical: 16,
                         ),
                       ),
                       validator: (value) {
@@ -308,42 +445,61 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     const SizedBox(height: 24),
                     // Password Field
-                    const Text(
+                    Text(
                       'Password',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF4B9A8F),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _passwordController,
                       obscureText: true,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF9CA3AF),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       decoration: InputDecoration(
                         hintText: '********',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFFD1D5DB),
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 16,
                         ),
-                        enabledBorder: const UnderlineInputBorder(
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFFE5E7EB),
+                            color: Theme.of(context).colorScheme.outlineVariant,
                             width: 1,
                           ),
                         ),
-                        focusedBorder: const UnderlineInputBorder(
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFF4B9A8F),
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                            width: 1.5,
+                          ),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
                             width: 2,
                           ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
+                          horizontal: 16,
+                          vertical: 16,
                         ),
                       ),
                       validator: (value) {
@@ -358,42 +514,61 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     const SizedBox(height: 24),
                     // Confirm Password Field
-                    const Text(
+                    Text(
                       'Confirm Password',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF4B9A8F),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _confirmPasswordController,
                       obscureText: true,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF9CA3AF),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       decoration: InputDecoration(
                         hintText: '********',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFFD1D5DB),
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 16,
                         ),
-                        enabledBorder: const UnderlineInputBorder(
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFFE5E7EB),
+                            color: Theme.of(context).colorScheme.outlineVariant,
                             width: 1,
                           ),
                         ),
-                        focusedBorder: const UnderlineInputBorder(
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide(
-                            color: Color(0xFF4B9A8F),
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                            width: 1.5,
+                          ),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
                             width: 2,
                           ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
+                          horizontal: 16,
+                          vertical: 16,
                         ),
                       ),
                       validator: (value) {
@@ -413,8 +588,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _handleRegister,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4B9A8F),
-                          foregroundColor: Colors.white,
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 18),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(30),
@@ -461,10 +636,10 @@ class _RegisterPageState extends State<RegisterPage> {
                               minimumSize: const Size(0, 0),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            child: const Text(
+                            child: Text(
                               'Log in',
                               style: TextStyle(
-                                color: Color(0xFF4B9A8F),
+                                color: Theme.of(context).colorScheme.primary,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,7 +78,7 @@ class _LoginPageState extends State<LoginPage> {
             final sessionId = sessionMatch.group(1);
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('sessionid', sessionId!);
-            print('Session saved: $sessionId');
+            debugPrint('Session saved: $sessionId');
           }
         }
 
@@ -104,6 +105,7 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
 
+        if (!mounted) return;
         // Role-based routing
         final isExplicitAdminCreds =
             email == 'admin@gmail.com' && password == 'Admin@123';
@@ -114,11 +116,11 @@ class _LoginPageState extends State<LoginPage> {
         } else {
           Navigator.pushReplacementNamed(context, '/home');
         }
-
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login successful'),
-            backgroundColor: Color(0xFF4B9A8F),
+          SnackBar(
+            content: const Text('Login successful'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
       } else {
@@ -137,6 +139,7 @@ class _LoginPageState extends State<LoginPage> {
         setState(() {
           _isLoading = false;
         });
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: Colors.red),
         );
@@ -167,8 +170,8 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     var heightOfScreen = MediaQuery.of(context).size.height;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
+        return Scaffold(
+          backgroundColor: Theme.of(context).colorScheme.surface,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -178,7 +181,7 @@ class _LoginPageState extends State<LoginPage> {
               clipper: CurvedBottomClipper(),
               child: Container(
                 height: heightOfScreen * 0.45,
-                decoration: const BoxDecoration(color: Color(0xFF7FD9CE)),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
                 child: Stack(
                   children: [
                     SafeArea(
@@ -244,83 +247,53 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     const SizedBox(height: 24),
                     // Email Field
-                    const Text(
+                    Text(
                       'Email',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF4B9A8F),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF9CA3AF),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       decoration: InputDecoration(
                         hintText: 'example@gmail.com',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFFD1D5DB),
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 16,
-                        ),
-                        enabledBorder: const UnderlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Color(0xFFE5E7EB),
-                            width: 1,
-                          ),
-                        ),
-                        focusedBorder: const UnderlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Color(0xFF4B9A8F),
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
                         ),
                       ),
                     ),
                     const SizedBox(height: 32),
                     // Password Field
-                    const Text(
+                    Text(
                       'Password',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF4B9A8F),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _passwordController,
                       obscureText: true,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF9CA3AF),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       decoration: InputDecoration(
                         hintText: '********',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFFD1D5DB),
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 16,
-                        ),
-                        enabledBorder: const UnderlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Color(0xFFE5E7EB),
-                            width: 1,
-                          ),
-                        ),
-                        focusedBorder: const UnderlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Color(0xFF4B9A8F),
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
                         ),
                       ),
                     ),
@@ -331,8 +304,8 @@ class _LoginPageState extends State<LoginPage> {
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _handleLogin,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4B9A8F),
-                          foregroundColor: Colors.white,
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 18),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(30),

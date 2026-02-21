@@ -10,6 +10,8 @@ urlpatterns = [
     path('auth/login/', views.login_user, name='login'),
     path('auth/logout/', views.logout_user, name='logout'),
     path('auth/current-user/', views.current_user, name='current-user'),
+    path('auth/request-otp/', views.request_otp, name='request-otp'),
+    path('auth/verify-otp/', views.verify_otp, name='verify-otp'),
     path('admin/add-utility-authority/', views.add_utility_authority, name='add-utility-authority'),
     path('user-utility/add/', views.add_user_utility, name='add-user-utility'),
     path('user-utility/list/', views.list_user_utilities, name='list-user-utilities'),
@@ -27,6 +29,12 @@ urlpatterns = [
     path('payments/list/', views.list_payments, name='list-payments'),
     path('payments/approve/', views.approve_payment, name='approve-payment'),
     path('payments/reject/', views.reject_payment, name='reject-payment'),
+    # Wallet endpoints
+    path('wallet/balance/', views.wallet_balance, name='wallet-balance'),
+    path('wallet/transactions/', views.wallet_transactions, name='wallet-transactions'),
+    # Chat endpoints
+    path('chat/thread/', views.chat_thread, name='chat-thread'),
+    path('chat/send/', views.chat_send, name='chat-send'),
     # Admin user management
     path('admin/set-user-active/', views.set_user_active, name='set-user-active'),
     path('admin/delete-user/', views.delete_user_account, name='delete-user'),

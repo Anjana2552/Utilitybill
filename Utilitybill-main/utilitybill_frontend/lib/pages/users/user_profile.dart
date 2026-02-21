@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../widgets/theme_header.dart';
+import 'edit_profile_page.dart';
+import 'payment_details_page.dart';
+import 'review_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
@@ -11,8 +19,156 @@ class UserProfilePage extends StatefulWidget {
 
 class _UserProfilePageState extends State<UserProfilePage> {
   ImageProvider? _profileImage;
+  String _username = '';
+  String _fullName = '';
+  final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _username = prefs.getString('user_username') ?? '';
+      _fullName = prefs.getString('full_name') ?? _username;
+      // Load saved profile image path if exists
+      if (!kIsWeb) {
+        final imagePath = prefs.getString('profile_image_path');
+        if (imagePath != null && imagePath.isNotEmpty) {
+          try {
+            _profileImage = FileImage(File(imagePath));
+          } catch (e) {
+            // Image file might not exist anymore
+            prefs.remove('profile_image_path');
+          }
+        }
+      }
+    });
+  }
+
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      
+      if (pickedFile != null) {
+        if (kIsWeb) {
+          // For web, read as bytes and use MemoryImage
+          final bytes = await pickedFile.readAsBytes();
+          setState(() {
+            _profileImage = MemoryImage(bytes);
+          });
+          
+          // Save as base64 for web
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('profile_image_web', pickedFile.path);
+        } else {
+          setState(() {
+            _profileImage = FileImage(File(pickedFile.path));
+          });
+          
+          // Save image path to SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('profile_image_path', pickedFile.path);
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile photo updated!')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: Image picker not available on web browser. Please use mobile app.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickImageFromCamera() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      
+      if (pickedFile != null) {
+        setState(() {
+          if (kIsWeb) {
+            _profileImage = NetworkImage(pickedFile.path);
+          } else {
+            _profileImage = FileImage(File(pickedFile.path));
+          }
+        });
+        
+        // Save image path to SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profile_image_path', pickedFile.path);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile photo updated!')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error taking photo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    setState(() {
+      _profileImage = null;
+    });
+    
+    // Remove from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('profile_image_path');
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo removed')),
+      );
+    }
+  }
 
   void _showChangePhotoSheet() {
+    if (kIsWeb) {
+      // Show simplified dialog for web
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Profile Photo'),
+          content: const Text(
+            'Image upload is currently not fully supported on web browsers. '
+            'Please use the mobile app for full profile photo functionality.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -27,9 +183,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
               title: const Text('Choose from Gallery'),
               onTap: () {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Image picker not set up yet')),
-                );
+                _pickImageFromGallery();
               },
             ),
             ListTile(
@@ -37,9 +191,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
               title: const Text('Take a Photo'),
               onTap: () {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Camera not set up yet')),
-                );
+                _pickImageFromCamera();
               },
             ),
             if (_profileImage != null)
@@ -51,7 +203,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 title: const Text('Remove Photo'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  setState(() => _profileImage = null);
+                  _removePhoto();
                 },
               ),
             const SizedBox(height: 8),
@@ -69,9 +221,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF4B9A8F);
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scheme.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -79,9 +231,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
             Stack(
               children: [
                 BlueGreenHeader(
-                  height: 220,
-                  overlay: _AvatarEdit(
+                  height: 250,
+                  overlay: _AvatarWithName(
                     image: _profileImage,
+                    username: _fullName.isNotEmpty ? _fullName : _username,
                     onTap: _showChangePhotoSheet,
                   ),
                 ),
@@ -90,7 +243,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   left: 8,
                   child: SafeArea(
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon: Icon(Icons.arrow_back, color: scheme.onPrimary),
                       tooltip: 'Back',
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
@@ -108,64 +261,49 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   Card(
                     elevation: 1,
                     child: ListTile(
-                      leading: const Icon(Icons.person_outline, color: accent),
+                      leading: Icon(Icons.person_outline, color: scheme.secondary),
                       title: const Text('Edit profile'),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
+                      onTap: () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const EditProfilePage(),
+                          ),
+                        );
+                        
+                        // Reload user data if profile was updated
+                        if (result == true && mounted) {
+                          _loadUserData();
+                        }
+                      },
                     ),
                   ),
                   Card(
                     elevation: 1,
                     child: ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.credit_card_outlined,
-                        color: accent,
+                        color: scheme.secondary,
                       ),
                       title: const Text('Payment Details'),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _soon(context, 'Payment Details'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const PaymentDetailsPage(),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   Card(
                     elevation: 1,
                     child: ListTile(
-                      leading: const Icon(
-                        Icons.settings_outlined,
-                        color: accent,
-                      ),
-                      title: const Text('Settings'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _soon(context, 'Settings'),
-                    ),
-                  ),
-                  // Added sections
-                  Card(
-                    elevation: 1,
-                    child: ListTile(
-                      leading: const Icon(
-                        Icons.location_on_outlined,
-                        color: accent,
-                      ),
-                      title: const Text('Saved Address'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _soon(context, 'Saved Address'),
-                    ),
-                  ),
-                  Card(
-                    elevation: 1,
-                    child: ListTile(
-                      leading: const Icon(Icons.credit_card, color: accent),
-                      title: const Text('Saved Credit/Debit Cards'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _soon(context, 'Saved Credit/Debit Cards'),
-                    ),
-                  ),
-                  Card(
-                    elevation: 1,
-                    child: ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.notifications_outlined,
-                        color: accent,
+                        color: scheme.secondary,
                       ),
                       title: const Text('Notification Settings'),
                       trailing: const Icon(Icons.chevron_right),
@@ -175,7 +313,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   Card(
                     elevation: 1,
                     child: ListTile(
-                      leading: const Icon(Icons.lock_outline, color: accent),
+                      leading: Icon(Icons.lock_outline, color: scheme.secondary),
                       title: const Text('Privacy Center'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _soon(context, 'Privacy Center'),
@@ -184,21 +322,28 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   Card(
                     elevation: 1,
                     child: ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.rate_review_outlined,
-                        color: accent,
+                        color: scheme.secondary,
                       ),
                       title: const Text('Reviews'),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _soon(context, 'Reviews'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ReviewPage(),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   Card(
                     elevation: 1,
                     child: ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.article_outlined,
-                        color: accent,
+                        color: scheme.secondary,
                       ),
                       title: const Text('Terms, Policies & Licenses'),
                       trailing: const Icon(Icons.chevron_right),
@@ -207,17 +352,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   ),
                   const SizedBox(height: 8),
                   Card(
-                    color: const Color(0xFFFFF1F1),
+                    color: scheme.errorContainer,
                     elevation: 0,
                     child: ListTile(
                       leading: const Icon(
                         Icons.logout,
                         color: Colors.redAccent,
                       ),
-                      title: const Text(
+                      title: Text(
                         'Logout',
                         style: TextStyle(
-                          color: Colors.redAccent,
+                          color: scheme.onErrorContainer,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -231,15 +376,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
         ),
       ),
       bottomNavigationBar: CurvedNavigationBar(
-        items: const [
-          Icon(Icons.home, size: 26, color: Colors.white),
-          Icon(Icons.payment, size: 26, color: Colors.white),
-          Icon(Icons.person, size: 26, color: Colors.white),
+        items: [
+          Icon(Icons.home, size: 26, color: scheme.onPrimary),
+          Icon(Icons.payment, size: 26, color: scheme.onPrimary),
+          Icon(Icons.chat_bubble_outline, size: 26, color: scheme.onPrimary),
+          Icon(Icons.person, size: 26, color: scheme.onPrimary),
         ],
-        index: 2,
-        color: const Color(0xFF7FD9CE),
-        buttonBackgroundColor: const Color(0xFF4B9A8F),
-        backgroundColor: Colors.white,
+        index: 3,
+        color: scheme.primary,
+        buttonBackgroundColor: scheme.primaryContainer,
+        backgroundColor: scheme.background,
         animationCurve: Curves.easeInOut,
         animationDuration: const Duration(milliseconds: 300),
         onTap: (index) {
@@ -251,60 +397,106 @@ class _UserProfilePageState extends State<UserProfilePage> {
             Navigator.pushNamed(context, '/user/bill_payment');
             return;
           }
-          // index==2 stays on profile
+          if (index == 2) {
+            Navigator.pushNamed(context, '/user/chat');
+            return;
+          }
+          // index==3 stays on profile
         },
       ),
     );
   }
 }
 
-class _AvatarEdit extends StatelessWidget {
+class _AvatarWithName extends StatelessWidget {
   final ImageProvider? image;
+  final String username;
   final VoidCallback onTap;
-  const _AvatarEdit({required this.image, required this.onTap});
+  const _AvatarWithName({
+    required this.image,
+    required this.username,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            CircleAvatar(
-              radius: 36,
-              backgroundColor: const Color(0xFFB2E8E1),
-              backgroundImage: image,
-              child: image == null
-                  ? const Icon(Icons.person, size: 36, color: Colors.white)
-                  : null,
-            ),
-            Positioned(
-              right: -2,
-              bottom: -2,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4B9A8F),
-                  shape: BoxShape.circle,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-                padding: const EdgeInsets.all(6),
-                child: const Icon(Icons.edit, size: 16, color: Colors.white),
+              ],
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 42,
+                  backgroundColor: scheme.primaryContainer,
+                  backgroundImage: image,
+                  child: image == null
+                      ? Icon(
+                          Icons.account_circle,
+                          size: 64,
+                          color: Colors.white.withOpacity(0.9),
+                        )
+                      : null,
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: scheme.surface,
+                        width: 2,
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(6),
+                    child: const Icon(Icons.edit, size: 14, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.95),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              username.isNotEmpty ? username : 'User',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: scheme.primary,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

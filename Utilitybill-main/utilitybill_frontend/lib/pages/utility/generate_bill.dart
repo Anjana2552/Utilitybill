@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/theme_header.dart';
 import '../../config/api_config.dart';
+import '../../services/notifications_service.dart';
+import '../../models/notification_item.dart';
 
 class GenerateBillPage extends StatefulWidget {
   const GenerateBillPage({super.key});
@@ -55,6 +57,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
   String? _providerName; // e.g., 'kseb'
   List<_Consumer> _consumers = []; // filtered view
   List<_Consumer> _allConsumers = []; // full list from backend
+  final NotificationsService _notifications = NotificationsService();
 
   @override
   void initState() {
@@ -101,16 +104,33 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
 
   Future<void> _initDefaults() async {
     // Generate bill id
-    _billIdCtrl.text = _generateBillId();
-
-    // Detect provider from saved username (kseb authority)
+    // Detect provider from saved username
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString('user_username')?.toLowerCase() ?? '';
-    if (username.endsWith('kseb')) {
+    if (username.contains('kseb')) {
       _providerName = 'kseb';
-    } else {
-      _providerName = 'kseb'; // default for now
+      _utilityType = 'Electricity';
+      _rateCtrl.text = '8';
+    } else if (username.contains('kwa') || username.contains('water')) {
+      _providerName = 'water';
+      _utilityType = 'Water';
+      _rateCtrl.text = '10';
+    } else if (username.contains('gas')) {
+      _providerName = 'gas';
+      _utilityType = 'Gas';
+      _rateCtrl.text = '8';
+    } else if (username.contains('wifi')) {
+      _providerName = 'wifi';
+      _utilityType = 'WiFi';
+      _rateCtrl.text = '';
+    } else if (username.contains('dth')) {
+      _providerName = 'dth';
+      _utilityType = 'DTH';
+      _rateCtrl.text = '';
     }
+
+    // Generate bill id after provider/type resolution
+    _billIdCtrl.text = _generateBillId();
     await _fetchConsumers();
     if (mounted) setState(() => _loadingConsumers = false);
   }
@@ -136,8 +156,8 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     } else if (type == 'gas') {
       prefix = 'LPG';
     } else if (type == 'wifi') {
-      // Use provider name for WiFi if available; else WIFI
-      prefix = (_providerName ?? 'WIFI').toUpperCase();
+      // Always prefix WiFi bills with WIFI (provider optional)
+      prefix = 'WIFI';
     } else if (type == 'dth') {
       // Always DTH for DTH utility type
       prefix = 'DTH';
@@ -150,8 +170,11 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
 
   Future<void> _fetchConsumers() async {
     try {
-      // Fetch all utilities (no provider filter) and filter by utility type client-side
-      final uri = Uri.parse('${ApiConfig.baseUrl}/user-utility/list/');
+      // Fetch utilities filtered by provider if available
+      final base = Uri.parse('${ApiConfig.baseUrl}/user-utility/list/');
+      final uri = (_providerName == null || _providerName!.isEmpty)
+          ? base
+          : base.replace(queryParameters: {'provider_name': _providerName!});
       final resp = await http.get(
         uri,
         headers: {'Content-Type': 'application/json'},
@@ -161,14 +184,41 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
         final results = (body['results'] as List<dynamic>? ?? [])
             .cast<Map<String, dynamic>>();
         final all = results
-            .map(
-              (e) => _Consumer(
-                name: (e['user_name']?.toString() ?? '').trim(),
-                number: (e['consumer_number']?.toString() ?? '').trim(),
-                utilityType: (e['utility_type']?.toString() ?? '').trim(),
-              ),
-            )
-            .where((c) => c.name.isNotEmpty || c.number.isNotEmpty)
+            .map((e) {
+              final m = e;
+              String pickName(Map<String, dynamic> m) {
+                String norm(Object? v) => (v?.toString() ?? '').trim();
+                bool isGeneric(String s) =>
+                    s.isEmpty ||
+                    s.toLowerCase() == 'user' ||
+                    s.toLowerCase() == 'unknown';
+                final candidates = <String>[
+                  norm(m['full_name']),
+                  norm(m['user_name']),
+                  norm(m['username']),
+                  norm(m['user_username']),
+                  norm(m['user']),
+                  norm(m['name']),
+                ];
+                for (final c in candidates) {
+                  if (!isGeneric(c)) return c;
+                }
+                return norm(m['user_name']);
+              }
+
+              return _Consumer(
+                name: pickName(m),
+                username: (m['user_name']?.toString() ?? '').trim(),
+                utilityType: (m['utility_type']?.toString() ?? '').trim(),
+                consumerNumber: (m['consumer_number']?.toString() ?? '').trim(),
+                waterConn: (m['water_connection_number']?.toString() ?? '')
+                    .trim(),
+                gasId: (m['gas_connection_number']?.toString() ?? '').trim(),
+                wifiId: (m['wifi_consumer_id']?.toString() ?? '').trim(),
+                dthId: (m['dth_subscriber_id']?.toString() ?? '').trim(),
+              );
+            })
+            .where((c) => c.name.isNotEmpty)
             .toList();
         all.sort(
           (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -193,9 +243,24 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
 
   void _applyConsumerFilter() {
     final type = _utilityType.toLowerCase();
-    final filtered = _allConsumers
-        .where((c) => c.utilityType.toLowerCase() == type)
-        .toList();
+    final filtered = _allConsumers.where((c) {
+      if (c.utilityType.toLowerCase() != type) return false;
+      // Ensure the relevant identifier exists for the selected type
+      switch (type) {
+        case 'electricity':
+          return c.consumerNumber.isNotEmpty;
+        case 'water':
+          return c.waterConn.isNotEmpty;
+        case 'gas':
+          return c.gasId.isNotEmpty;
+        case 'wifi':
+          return c.wifiId.isNotEmpty;
+        case 'dth':
+          return c.dthId.isNotEmpty;
+        default:
+          return true;
+      }
+    }).toList();
     filtered.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
     );
@@ -207,12 +272,34 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       _selectedConsumerName = name;
       final matched = _consumers.firstWhere(
         (c) => c.name == name,
-        orElse: () =>
-            _Consumer(name: name ?? '', number: '', utilityType: _utilityType),
+        orElse: () => _Consumer(
+          name: name ?? '', 
+          username: '',
+          utilityType: _utilityType,
+        ),
       );
-      _consumerNumberCtrl.text = matched.number;
-      // Prefill previous reading from local history for this consumer
-      _prefillPreviousReadingFromHistory();
+      // Autofill the relevant identifier based on the selected type
+      if (_isElectricity) {
+        _consumerNumberCtrl.text = matched.consumerNumber;
+      } else if (_isWater) {
+        _waterConnCtrl.text = matched.waterConn;
+      } else if (_isGas) {
+        _gasConsumerIdCtrl.text = matched.gasId;
+      } else if (_isWifi) {
+        _wifiCustomerIdCtrl.text = matched.wifiId;
+      } else if (_isDth) {
+        _dthSubscriberIdCtrl.text = matched.dthId;
+      }
+      
+      // Clear previous reading first to avoid showing wrong data
+      _prevReadingCtrl.clear();
+      _currentReadingCtrl.clear();
+      _unitsCtrl.clear();
+      _totalCtrl.clear();
+      
+      // Prefill previous reading smartly (history -> backend -> baseline)
+      // This will fetch the specific consumer's last reading
+      _prefillPreviousReadingSmart();
     });
   }
 
@@ -237,6 +324,43 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     } else {
       if (_isElectricity || _isWater || _isGas) _totalCtrl.text = '';
     }
+  }
+
+  void _onUtilityTypeChanged(String v) {
+    setState(() {
+      _utilityType = v;
+      if (!_isElectricity) {
+        _consumerNumberCtrl.clear();
+        _prevReadingCtrl.clear();
+        _currentReadingCtrl.clear();
+        _unitsCtrl.clear();
+        _totalCtrl.clear();
+      }
+      _waterConnCtrl.clear();
+      _gasConsumerIdCtrl.clear();
+      _wifiCustomerIdCtrl.clear();
+      _dthSubscriberIdCtrl.clear();
+      _selectedConsumerName = null;
+      _applyConsumerFilter();
+      if (_isWater) {
+        _rateCtrl.text = '10';
+      } else if (_isElectricity) {
+        _rateCtrl.text = '8';
+      } else if (_isGas) {
+        _rateCtrl.text = '8';
+      } else {
+        _rateCtrl.text = '';
+      }
+      _billIdCtrl.text = _generateBillId();
+      if (_isWifi) {
+        _selectedWifiPlan = 'Basic';
+        _totalCtrl.text = '799.00';
+      } else if (_isDth) {
+        _selectedDthPackage = '299 - 15 days';
+        final amt = _amountFromPlan(_selectedDthPackage) ?? 0.0;
+        _totalCtrl.text = amt.toStringAsFixed(2);
+      }
+    });
   }
 
   Future<void> _pickReadingDate() async {
@@ -363,10 +487,14 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
             ),
           ),
         );
-        // Save last current reading for this consumer for next time (electricity only)
-        if (_isElectricity) {
+        // Save last current reading for this consumer for next time (for all utilities with readings)
+        if (_isElectricity || _isWater || _isGas) {
           await _saveLastReadingForConsumer();
         }
+        
+        // Create notification for the user
+        await _createUserNotification(payload);
+        
         _resetForm();
       } else {
         final msg = resp.body.isNotEmpty ? resp.body : 'Failed to save bill';
@@ -391,9 +519,11 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     } catch (_) {
       data = {};
     }
-    final key = _consumerNumberCtrl.text.trim().isNotEmpty
-        ? _consumerNumberCtrl.text.trim()
-        : (_selectedConsumerName ?? '').trim();
+    
+    // Use the consumer-specific identifier as the key (works for all utility types)
+    final key = _currentConsumerId();
+    if (key.isEmpty) return;
+    
     final last = data[key]?.toString();
     if (last != null && last.isNotEmpty) {
       setState(() {
@@ -403,11 +533,78 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     }
   }
 
+  String _currentConsumerId() {
+    if (_isElectricity) return _consumerNumberCtrl.text.trim();
+    if (_isWater) return _waterConnCtrl.text.trim();
+    if (_isGas) return _gasConsumerIdCtrl.text.trim();
+    if (_isWifi) return _wifiCustomerIdCtrl.text.trim();
+    if (_isDth) return _dthSubscriberIdCtrl.text.trim();
+    return '';
+  }
+
+  Future<void> _prefillPreviousReadingFromBackend() async {
+    if (!(_isElectricity || _isWater || _isGas)) return;
+    final cid = _currentConsumerId();
+    if (cid.isEmpty) return;
+    try {
+      final type = _utilityType;
+      
+      // Build query parameters based on utility type
+      final Map<String, String> params = {'utility_type': type};
+      if (_isElectricity) {
+        params['consumer_number'] = cid;
+      } else if (_isWater) {
+        params['water_connection_number'] = cid;
+      } else if (_isGas) {
+        params['gas_consumer_id'] = cid;
+      }
+      
+      // Call the dedicated last-reading endpoint
+      final uri = Uri.parse('${ApiConfig.baseUrl}/bills/last-reading/')
+          .replace(queryParameters: params);
+      final resp = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
+      
+      if (resp.statusCode == 200) {
+        final obj = jsonDecode(resp.body) as Map<String, dynamic>;
+        final currentReading = obj['current_reading'];
+        
+        // If we found a previous bill, use its current_reading as our previous_reading
+        if (currentReading != null) {
+          final prev = currentReading.toString();
+          if (prev.isNotEmpty && prev != 'null') {
+            setState(() {
+              _prevReadingCtrl.text = prev;
+              _recomputeUnitsAndTotal();
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _prefillPreviousReadingSmart() async {
+    if (!(_isElectricity || _isWater || _isGas)) return;
+    // 1) try local history
+    await _prefillPreviousReadingFromHistory();
+    if (_prevReadingCtrl.text.trim().isNotEmpty) return;
+    // 2) try backend last bill
+    await _prefillPreviousReadingFromBackend();
+    if (_prevReadingCtrl.text.trim().isNotEmpty) return;
+    // 3) fallback baseline for first-time billing
+    setState(() {
+      _prevReadingCtrl.text = '100';
+      _recomputeUnitsAndTotal();
+    });
+  }
+
   Future<void> _saveLastReadingForConsumer() async {
-    final key = _consumerNumberCtrl.text.trim().isNotEmpty
-        ? _consumerNumberCtrl.text.trim()
-        : (_selectedConsumerName ?? '').trim();
+    // Use the consumer-specific identifier as the key (works for all utility types)
+    final key = _currentConsumerId();
     if (key.isEmpty) return;
+    
     final current = _currentReadingCtrl.text.trim();
     if (current.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
@@ -420,6 +617,42 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
     }
     data[key] = current;
     await prefs.setString('last_reading_per_consumer', jsonEncode(data));
+  }
+
+  Future<void> _createUserNotification(Map<String, dynamic> payload) async {
+    try {
+      // Find the selected consumer to get their username
+      final consumer = _consumers.firstWhere(
+        (c) => c.name == _selectedConsumerName,
+        orElse: () => _Consumer(
+          name: '', 
+          username: '',
+          utilityType: _utilityType,
+        ),
+      );
+      
+      // Only create notification if we have a valid username
+      if (consumer.username.isEmpty) return;
+      
+      final billId = payload['bill_id']?.toString() ?? '';
+      final amount = payload['total_amount']?.toString() ?? '0';
+      final utilityName = _utilityType;
+      
+      final notification = NotificationItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'bill_generated',
+        title: 'New $utilityName Bill Generated',
+        message: 'Bill ID: $billId - Amount: ₹$amount. Please pay before the due date.',
+        timestamp: DateTime.now(),
+        username: consumer.username,
+        utilityType: null, // User notifications don't filter by utilityType
+        read: false,
+      );
+      
+      await _notifications.addUnique(notification);
+    } catch (e) {
+      // Silently handle errors
+    }
   }
 
   void _resetForm() {
@@ -490,58 +723,47 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Utility Type
+              // Utility Type (restricted to provider's type, if known)
               DropdownButtonFormField<String>(
                 initialValue: _utilityType,
-                items:
-                    const [
-                          'Electricity',
-                          'Water',
-                          'Gas',
-                          'WiFi',
-                          'DTH',
-                          'Others',
-                        ]
-                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                        .toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _utilityType = v;
-                    // Clear electricity-specific computed fields when switching away
-                    if (!_isElectricity) {
-                      _consumerNumberCtrl.clear();
-                      _prevReadingCtrl.clear();
-                      _currentReadingCtrl.clear();
-                      _unitsCtrl.clear();
-                      _totalCtrl.clear();
-                    }
-                    // Reset consumer selection and apply filter by utility type
-                    _selectedConsumerName = null;
-                    _applyConsumerFilter();
-                    // Update default rate per unit when changing type
-                    if (_isWater) {
-                      _rateCtrl.text = '10';
-                    } else if (_isElectricity) {
-                      _rateCtrl.text = '8';
-                    } else if (_isGas) {
-                      _rateCtrl.text = '8';
-                    } else {
-                      _rateCtrl.text = '';
-                    }
-                    // Regenerate Bill ID to reflect new utility type prefix
-                    _billIdCtrl.text = _generateBillId();
-                    // Set totals for WiFi/DTH
-                    if (_isWifi) {
-                      _selectedWifiPlan = 'Basic';
-                      _totalCtrl.text = '799.00';
-                    } else if (_isDth) {
-                      _selectedDthPackage = '299 - 15 days';
-                      final amt = _amountFromPlan(_selectedDthPackage) ?? 0.0;
-                      _totalCtrl.text = amt.toStringAsFixed(2);
-                    }
-                  });
-                },
+                items: () {
+                  final p = (_providerName ?? '').toLowerCase();
+                  List<String> all = const [
+                    'Electricity',
+                    'Water',
+                    'Gas',
+                    'WiFi',
+                    'DTH',
+                    'Others',
+                  ];
+                  List<String> allowed;
+                  if (p == 'kseb') {
+                    allowed = ['Electricity'];
+                  } else if (p == 'water' || p == 'kwa') {
+                    allowed = ['Water'];
+                  } else if (p == 'gas') {
+                    allowed = ['Gas'];
+                  } else if (p == 'wifi') {
+                    allowed = ['WiFi'];
+                  } else if (p == 'dth') {
+                    allowed = ['DTH'];
+                  } else {
+                    allowed = all;
+                  }
+                  // Ensure current type is valid
+                  if (!allowed.contains(_utilityType)) {
+                    _utilityType = allowed.first;
+                  }
+                  return allowed
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList();
+                }(),
+                onChanged: (_providerName == null || _providerName!.isEmpty)
+                    ? (v) {
+                        if (v == null) return;
+                        _onUtilityTypeChanged(v);
+                      }
+                    : null, // lock to provider's utility type
                 decoration: const InputDecoration(
                   labelText: 'Utility Type',
                   prefixIcon: Icon(Icons.category_outlined),
@@ -602,6 +824,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               if (_isWater) ...[
                 TextFormField(
                   controller: _waterConnCtrl,
+                  readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'Water Connection Number',
                     prefixIcon: Icon(Icons.numbers),
@@ -617,6 +840,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               if (_isWifi) ...[
                 TextFormField(
                   controller: _wifiCustomerIdCtrl,
+                  readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'Customer ID / Account Number',
                     prefixIcon: Icon(Icons.numbers),
@@ -644,6 +868,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               if (_isGas) ...[
                 TextFormField(
                   controller: _gasConsumerIdCtrl,
+                  readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'Gas Consumer ID',
                     prefixIcon: Icon(Icons.numbers),
@@ -659,6 +884,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
               if (_isDth) ...[
                 TextFormField(
                   controller: _dthSubscriberIdCtrl,
+                  readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'Subscriber ID',
                     prefixIcon: Icon(Icons.numbers),
@@ -853,7 +1079,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                   icon: const Icon(Icons.playlist_add_check),
                   label: const Text('Generate Bill'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF34B3A0),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -868,11 +1094,21 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
 
 class _Consumer {
   final String name;
-  final String number;
+  final String username; // actual username for notifications
   final String utilityType;
+  final String consumerNumber; // electricity
+  final String waterConn;
+  final String gasId;
+  final String wifiId;
+  final String dthId;
   _Consumer({
     required this.name,
-    required this.number,
+    required this.username,
     required this.utilityType,
+    this.consumerNumber = '',
+    this.waterConn = '',
+    this.gasId = '',
+    this.wifiId = '',
+    this.dthId = '',
   });
 }

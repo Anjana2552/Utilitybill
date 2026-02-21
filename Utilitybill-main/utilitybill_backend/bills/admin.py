@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserProfile, UserUtility, UtilityBill
+from .models import UserProfile, UserUtility, UtilityBill, ChatMessage
 
 
 @admin.register(UserProfile)
@@ -21,4 +21,14 @@ class UserUtilityAdmin(admin.ModelAdmin):
 class UtilityBillAdmin(admin.ModelAdmin):
     list_display = ['bill_id', 'utility_type', 'consumer_name', 'consumer_id', 'total_amount', 'created_at']
     list_filter = ['utility_type', 'created_at']
+
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(admin.ModelAdmin):
+    list_display = ['provider_name', 'user_name', 'sender_role', 'short_text', 'created_at']
+    list_filter = ['provider_name', 'sender_role', 'created_at']
+    search_fields = ['user_name', 'provider_name', 'text']
+
+    def short_text(self, obj):
+        return (obj.text or '')[:50]
     search_fields = ['bill_id', 'consumer_name', 'consumer_id']

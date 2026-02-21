@@ -31,9 +31,40 @@ class _UtilityUsersListPageState extends State<UtilityUsersListPage> {
       _error = null;
     });
     try {
-      final uri = Uri.parse(
-        '${ApiConfig.baseUrl}/user-utility/list/?provider_name=${Uri.encodeQueryComponent(widget.providerName)}',
-      );
+      // Prefer filtering by utility_type for consistent grouping across providers
+      String type;
+      switch (widget.providerName.toLowerCase()) {
+        case 'kseb':
+          type = 'Electricity';
+          break;
+        case 'water':
+        case 'kwa':
+          type = 'Water';
+          break;
+        case 'gas':
+          type = 'Gas';
+          break;
+        case 'wifi':
+          type = 'Wifi';
+          break;
+        case 'dth':
+          type = 'DTH';
+          break;
+        case 'others':
+        case 'other':
+          type = 'Others';
+          break;
+        default:
+          type = '';
+      }
+      final base = Uri.parse('${ApiConfig.baseUrl}/user-utility/list/');
+      final uri = type.isEmpty
+          ? base.replace(queryParameters: {
+              'provider_name': widget.providerName,
+            })
+          : base.replace(queryParameters: {
+              'utility_type': type,
+            });
       final resp = await http.get(
         uri,
         headers: {'Content-Type': 'application/json'},
@@ -115,9 +146,12 @@ class _UtilityUsersListPageState extends State<UtilityUsersListPage> {
                       .trim();
 
                   return ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFE8F6F4),
-                      child: Icon(Icons.person, color: Color(0xFF34B3A0)),
+                    leading: CircleAvatar(
+                      backgroundColor: const Color(0xFFE8F6F4),
+                      child: Icon(
+                        Icons.person,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
                     ),
                     title: Text(displayName),
                     subtitle: Column(

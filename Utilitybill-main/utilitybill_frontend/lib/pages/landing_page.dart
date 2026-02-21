@@ -8,7 +8,7 @@ class LandingPage extends StatelessWidget {
     var heightOfScreen = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -20,7 +20,7 @@ class LandingPage extends StatelessWidget {
                   clipper: CurvedBottomClipper(),
                   child: Container(
                     height: heightOfScreen * 0.65,
-                    decoration: const BoxDecoration(color: Color(0xFF7FD9CE)),
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
                   ),
                 ),
                 SafeArea(
@@ -39,16 +39,16 @@ class LandingPage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
+                                color: Colors.black.withValues(alpha: 0.1),
                                 blurRadius: 20,
                                 offset: const Offset(0, 10),
                               ),
                             ],
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.receipt_long,
                             size: 50,
-                            color: Color(0xFF4B9A8F),
+                            color: Theme.of(context).colorScheme.secondary,
                           ),
                         ),
                         const SizedBox(height: 30),
@@ -112,8 +112,8 @@ class LandingPage extends StatelessWidget {
                         Navigator.pushNamed(context, '/register');
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4B9A8F),
-                        foregroundColor: Colors.white,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
@@ -138,10 +138,10 @@ class LandingPage extends StatelessWidget {
                         Navigator.pushNamed(context, '/login');
                       },
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF4B9A8F),
+                        foregroundColor: Theme.of(context).colorScheme.primary,
                         padding: const EdgeInsets.symmetric(vertical: 18),
-                        side: const BorderSide(
-                          color: Color(0xFF4B9A8F),
+                        side: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
                           width: 2,
                         ),
                         shape: RoundedRectangleBorder(
@@ -171,7 +171,7 @@ class LandingPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(

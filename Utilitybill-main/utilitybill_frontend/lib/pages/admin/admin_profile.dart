@@ -7,12 +7,9 @@ class AdminProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: const Color(0xFF7FD9CE),
-        foregroundColor: Colors.white,
-        elevation: 0,
+        title: const Text('Admin Profile'),
       ),
       body: SafeArea(
         child: Column(
@@ -27,7 +24,7 @@ class AdminProfilePage extends StatelessWidget {
                     SizedBox(height: 20),
                     CircleAvatar(
                       radius: 50,
-                      backgroundColor: Color(0xFF7FD9CE),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
                       child: Icon(Icons.person, size: 50, color: Colors.white),
                     ),
                     SizedBox(height: 20),

@@ -1,18 +1,30 @@
 import 'package:flutter/material.dart';
 
+enum HeaderShape { wave, square }
+
 class BlueGreenHeader extends StatelessWidget {
   final double height;
   final String? title;
   final TextStyle? titleStyle;
+  final String? subtitle;
+  final TextStyle? subtitleStyle;
   final Widget? overlay;
-  final Color backgroundColor;
+  final double overlayYOffset;
+  final Color? backgroundColor;
+  final HeaderShape shape;
+  final HeaderTitleAlignment titleAlignment;
   const BlueGreenHeader({
     super.key,
     this.height = 260,
     this.title,
     this.titleStyle,
+    this.subtitle,
+    this.subtitleStyle,
     this.overlay,
-    this.backgroundColor = const Color(0xFF7FD9CE),
+    this.overlayYOffset = 0,
+    this.backgroundColor,
+    this.shape = HeaderShape.wave,
+    this.titleAlignment = HeaderTitleAlignment.center,
   });
 
   @override
@@ -23,30 +35,112 @@ class BlueGreenHeader extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          ClipPath(
-            clipper: _WaveClipper(offset: 0),
-            child: Container(
-              color: backgroundColor,
-              child: title == null
-                  ? null
-                  : Center(
-                      child: Text(
-                        title!,
-                        textAlign: TextAlign.center,
-                        style:
-                            titleStyle ??
-                            const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                    ),
+          if (shape == HeaderShape.wave)
+            ClipPath(
+              clipper: _WaveClipper(offset: 0),
+              child: _buildBackground(context),
+            )
+          else
+            _buildBackground(context),
+          if (overlay != null)
+            Center(
+              child: Transform.translate(
+                offset: Offset(0, overlayYOffset),
+                child: overlay,
+              ),
             ),
-          ),
-          if (overlay != null) Center(child: overlay),
         ],
       ),
+    );
+  }
+
+  Widget _buildBackground(BuildContext context) {
+    final Color bg = backgroundColor ?? Theme.of(context).colorScheme.primary;
+    final Color onBg = Theme.of(context).colorScheme.onPrimary;
+    return Container(
+      color: bg,
+      child: (title == null && subtitle == null)
+          ? null
+          : (titleAlignment == HeaderTitleAlignment.center
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (title != null)
+                          Text(
+                            title!,
+                            textAlign: TextAlign.center,
+                            style:
+                                titleStyle ??
+                                TextStyle(
+                                  color: onBg,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.none,
+                                ),
+                          ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            subtitle!,
+                            textAlign: TextAlign.center,
+                            style:
+                                subtitleStyle ??
+                                TextStyle(
+                                  color: onBg.withValues(alpha: 0.9),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.none,
+                                ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.only(
+                      top: 16,
+                      left: 16,
+                      right: 16,
+                    ),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (title != null)
+                            Text(
+                              title!,
+                              textAlign: TextAlign.left,
+                              style:
+                                  titleStyle ??
+                                  TextStyle(
+                                    color: onBg,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.none,
+                                  ),
+                            ),
+                          if (subtitle != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitle!,
+                              textAlign: TextAlign.left,
+                              style:
+                                  subtitleStyle ??
+                                  TextStyle(
+                                    color: onBg.withValues(alpha: 0.9),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.none,
+                                  ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  )),
     );
   }
 }
@@ -131,12 +225,14 @@ class CurvedHeaderPage extends StatelessWidget {
                 BlueGreenHeader(
                   height: headerHeight,
                   title: title,
-                  backgroundColor: headerColor ?? const Color(0xFF7FD9CE),
+                  backgroundColor:
+                      headerColor ?? Theme.of(context).colorScheme.primary,
                 )
               else
                 BlueGreenHeader(
                   height: headerHeight,
-                  backgroundColor: headerColor ?? const Color(0xFF7FD9CE),
+                  backgroundColor:
+                      headerColor ?? Theme.of(context).colorScheme.primary,
                 ),
 
               if (titleAlignment == HeaderTitleAlignment.center) ...[
@@ -167,10 +263,11 @@ class CurvedHeaderPage extends StatelessWidget {
                           const SizedBox(width: 12),
                           Text(
                             title!,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onPrimary,
                               fontSize: 20,
                               fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.none,
                             ),
                           ),
                         ],
