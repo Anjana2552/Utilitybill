@@ -17,6 +17,7 @@ class UserProfile(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     house_number = models.CharField(max_length=50, blank=True)
     address = models.TextField(blank=True)
+    utility_type = models.CharField(max_length=50, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     # Simple OTP verification fields
@@ -185,6 +186,7 @@ class ChatMessage(models.Model):
     sender_role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     sender_username = models.CharField(max_length=150, blank=True)
     text = models.TextField()
+    is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -235,3 +237,90 @@ class WalletTransaction(models.Model):
 
     def __str__(self):
         return f"{self.type.title()} ₹{self.amount} ({self.wallet.user.username})"
+
+
+class PaymentMethod(models.Model):
+    """Stores saved payment methods for users."""
+    METHOD_CHOICES = (
+        ('Credit Card', 'Credit Card'),
+        ('Bank Transfer', 'Bank Transfer'),
+        ('UPI', 'UPI'),
+    )
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_payment_methods')
+    method = models.CharField(max_length=50, choices=METHOD_CHOICES)
+    detail = models.CharField(max_length=255)  # Last 4 digits of card, UPI ID, Account number etc.
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'payment_method'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.method} ({self.detail})"
+
+
+class Notification(models.Model):
+    """Stores notifications for users"""
+    TYPE_CHOICES = (
+        ('bill_added', 'Bill Added'),
+        ('bill_generated', 'Bill Generated'),
+        ('payment_initiated', 'Payment Initiated'),
+        ('payment_pending', 'Payment Pending'),
+        ('payment_approved', 'Payment Approved'),
+        ('payment_rejected', 'Payment Rejected'),
+        ('bill_due', 'Bill Due'),
+        ('bill_overdue', 'Bill Overdue'),
+        ('reward_earned', 'Reward Earned'),
+        ('profile_updated', 'Profile Updated'),
+    )
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=50, choices=TYPE_CHOICES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    utility_type = models.CharField(max_length=50, blank=True)  # For utility authority filtering
+    bill_id = models.CharField(max_length=64, blank=True)  # Reference to generated bill
+    due_date = models.DateField(null=True, blank=True)  # For bill due notifications
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'notification'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'read']),
+            models.Index(fields=['utility_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
+
+
+class Review(models.Model):
+    """Stores customer reviews for utility providers"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews', null=True, blank=True)
+    provider_name = models.CharField(max_length=150)  # e.g., 'kseb', 'water', 'gas'
+    utility_type = models.CharField(max_length=50)  # e.g., 'Electricity', 'Water', 'Gas'
+    rating = models.IntegerField(choices=[(i, str(i)) for i in range(1, 6)])  # 1-5 stars
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'review'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['provider_name', '-created_at']),
+            models.Index(fields=['utility_type', '-created_at']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+    
+    def __str__(self):
+        user_str = self.user.username if self.user else 'Anonymous'
+        return f"{user_str} - {self.utility_type} ({self.rating}★)"

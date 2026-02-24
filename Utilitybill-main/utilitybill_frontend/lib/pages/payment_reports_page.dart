@@ -258,307 +258,333 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetchData,
-          child: CurvedHeaderPage(
-            headerHeight: 180,
-            titleAlignment: HeaderTitleAlignment.left,
-            bottomLeft: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _filterOpen
-                  ? Container(
-                      key: const ValueKey('open'),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: scheme.surface.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: _filterOpen
+                      ? Container(
+                          key: const ValueKey('open'),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: scheme.surface.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
-                              Icon(Icons.payments, color: scheme.onSurface),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Total: ${filteredTotal.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: scheme.onSurface,
-                                ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.payments, color: scheme.onSurface),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Total: ${filteredTotal.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _pickFromDate,
+                                icon: const Icon(Icons.date_range),
+                                label: Text('From: ${_fmtDate(_fromDate)}'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _pickToDate,
+                                icon: const Icon(Icons.event),
+                                label: Text('To: ${_fmtDate(_toDate)}'),
+                              ),
+                              IconButton(
+                                tooltip: 'Clear',
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  setState(() {
+                                    _fromDate = null;
+                                    _toDate = null;
+                                  });
+                                },
+                              ),
+                              IconButton(
+                                tooltip: 'Close',
+                                icon: const Icon(Icons.close),
+                                onPressed: () =>
+                                    setState(() => _filterOpen = false),
                               ),
                             ],
                           ),
-                          OutlinedButton.icon(
-                            onPressed: _pickFromDate,
-                            icon: const Icon(Icons.date_range),
-                            label: Text('From: ${_fmtDate(_fromDate)}'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _pickToDate,
-                            icon: const Icon(Icons.event),
-                            label: Text('To: ${_fmtDate(_toDate)}'),
-                          ),
-                          IconButton(
-                            tooltip: 'Clear',
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              setState(() {
-                                _fromDate = null;
-                                _toDate = null;
-                              });
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'Close',
-                            icon: const Icon(Icons.close),
-                            onPressed: () =>
-                                setState(() => _filterOpen = false),
-                          ),
-                        ],
-                      ),
-                    )
-                  : Row(
-                      key: const ValueKey('closed'),
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.payments, color: Theme.of(context).colorScheme.onPrimary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Total Collected: ${_totalCollected.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onPrimary,
-                            fontWeight: FontWeight.w600,
+                        )
+                      : Row(
+                          key: const ValueKey('closed'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.payments, color: scheme.primary),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Total Collected: ${_totalCollected.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: scheme.primary,
+                                side: BorderSide(
+                                    color: scheme.primary.withOpacity(0.7)),
+                              ),
+                              onPressed: () =>
+                                  setState(() => _filterOpen = true),
+                              icon: const Icon(Icons.search),
+                              label: const Text('Date Filter'),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    : SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Pending Payments',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              if (pending.isEmpty)
+                                const Text('No pending payments')
+                              else
+                                ListView.builder(
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  shrinkWrap: true,
+                                  itemCount: pending.length,
+                                  itemBuilder: (context, index) {
+                                    final it = pending[index];
+                                    return Card(
+                                      elevation: 1,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: ListTile(
+                                        leading: Icon(
+                                          Icons.person_outline,
+                                          color: scheme.secondary,
+                                        ),
+                                        title: Text(
+                                          it['consumer_name'].toString().isEmpty
+                                              ? 'User'
+                                              : it['consumer_name'],
+                                        ),
+                                        subtitle: Text(
+                                          'Bill: ${it['bill_id']} • ${it['utility_type']}',
+                                        ),
+                                        trailing: (it['due'] as double) > 0
+                                            ? Text(
+                                                'Due: ${(it['due'] as double).toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  color: Colors.redAccent,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              )
+                                            : const Text(
+                                                'Unpaid',
+                                                style: TextStyle(
+                                                    color: Colors.redAccent),
+                                              ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              const SizedBox(height: 16),
+                              ListView.builder(
+                                physics: const NeverScrollableScrollPhysics(),
+                                shrinkWrap: true,
+                                itemCount: filteredPayments.length,
+                                itemBuilder: (context, index) {
+                                  final p = filteredPayments[index];
+                                  return Card(
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.payments_outlined,
+                                                color: scheme.secondary,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  (p['bill_id'] ?? '')
+                                                      .toString(),
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              Row(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                children: [
+                                                  _PaymentStatusChip(
+                                                    status: (p['status'] ??
+                                                            'pending')
+                                                        .toString(),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    (p['amount'] ?? '')
+                                                        .toString(),
+                                                    style: const TextStyle(
+                                                      color: Colors.grey,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons
+                                                    .calendar_month_outlined,
+                                                size: 16,
+                                                color: Colors.grey,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                (p['payment_date'] ?? '')
+                                                    .toString(),
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.receipt_long,
+                                                size: 16,
+                                                color: Colors.grey,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                (p['payment_method'] ?? '')
+                                                    .toString(),
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          if (_isAdmin)
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.end,
+                                              children: [
+                                                if ((p['status'] ??
+                                                        'pending') !=
+                                                    'approved')
+                                                  TextButton.icon(
+                                                    onPressed: () async {
+                                                      final ok =
+                                                          await _updatePaymentStatus(
+                                                        p['id'],
+                                                        true,
+                                                      );
+                                                      if (ok && mounted)
+                                                        setState(() {
+                                                          p['status'] =
+                                                              'approved';
+                                                        });
+                                                    },
+                                                    icon: const Icon(
+                                                      Icons
+                                                          .check_circle_outline,
+                                                      color: Colors.green,
+                                                    ),
+                                                    label: const Text(
+                                                      'Approve',
+                                                      style: TextStyle(
+                                                          color: Colors.green),
+                                                    ),
+                                                  ),
+                                                const SizedBox(width: 8),
+                                                if ((p['status'] ??
+                                                        'pending') !=
+                                                    'rejected')
+                                                  TextButton.icon(
+                                                    onPressed: () async {
+                                                      final ok =
+                                                          await _updatePaymentStatus(
+                                                        p['id'],
+                                                        false,
+                                                      );
+                                                      if (ok && mounted)
+                                                        setState(() {
+                                                          p['status'] =
+                                                              'rejected';
+                                                        });
+                                                    },
+                                                    icon: const Icon(
+                                                      Icons.highlight_off,
+                                                      color: Colors.redAccent,
+                                                    ),
+                                                    label: const Text(
+                                                      'Reject',
+                                                      style: TextStyle(
+                                                          color: Colors
+                                                              .redAccent),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                            side: BorderSide(color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)),
-                          ),
-                          onPressed: () => setState(() => _filterOpen = true),
-                          icon: const Icon(Icons.search),
-                          label: const Text('Date Filter'),
-                        ),
-                      ],
-                    ),
-            ),
-            child: Builder(
-              builder: (context) {
-                if (_loading) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Pending Payments',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (pending.isEmpty)
-                      const Text('No pending payments')
-                    else
-                      ListView.builder(
-                        physics: const NeverScrollableScrollPhysics(),
-                        shrinkWrap: true,
-                        itemCount: pending.length,
-                        itemBuilder: (context, index) {
-                          final it = pending[index];
-                          return Card(
-                            elevation: 1,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListTile(
-                              leading: Icon(
-                                Icons.person_outline,
-                                color: Theme.of(context).colorScheme.secondary,
-                              ),
-                              title: Text(
-                                it['consumer_name'].toString().isEmpty
-                                    ? 'User'
-                                    : it['consumer_name'],
-                              ),
-                              subtitle: Text(
-                                'Bill: ${it['bill_id']} • ${it['utility_type']}',
-                              ),
-                              trailing: (it['due'] as double) > 0
-                                  ? Text(
-                                      'Due: ${(it['due'] as double).toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        color: Colors.redAccent,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Unpaid',
-                                      style: TextStyle(color: Colors.redAccent),
-                                    ),
-                            ),
-                          );
-                        },
-                      ),
-                    // const SizedBox(height: 16),
-                    // const Text(
-                    //   'Payments',
-                    //   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                    // ),
-                    const SizedBox(height: 8),
-                    ListView.builder(
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      itemCount: filteredPayments.length,
-                      itemBuilder: (context, index) {
-                        final p = filteredPayments[index];
-                        return Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.payments_outlined,
-                                      color: Theme.of(context).colorScheme.secondary,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        (p['bill_id'] ?? '').toString(),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _PaymentStatusChip(
-                                          status: (p['status'] ?? 'pending')
-                                              .toString(),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          (p['amount'] ?? '').toString(),
-                                          style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.calendar_month_outlined,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      (p['payment_date'] ?? '').toString(),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.receipt_long,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      (p['payment_method'] ?? '').toString(),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                if (_isAdmin)
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      if ((p['status'] ?? 'pending') != 'approved')
-                                        TextButton.icon(
-                                          onPressed: () async {
-                                            final ok = await _updatePaymentStatus(
-                                              p['id'],
-                                              true,
-                                            );
-                                            if (ok && mounted) setState(() {
-                                              p['status'] = 'approved';
-                                            });
-                                          },
-                                          icon: const Icon(
-                                            Icons.check_circle_outline,
-                                            color: Colors.green,
-                                          ),
-                                          label: const Text(
-                                            'Approve',
-                                            style: TextStyle(color: Colors.green),
-                                          ),
-                                        ),
-                                      const SizedBox(width: 8),
-                                      if ((p['status'] ?? 'pending') != 'rejected')
-                                        TextButton.icon(
-                                          onPressed: () async {
-                                            final ok = await _updatePaymentStatus(
-                                              p['id'],
-                                              false,
-                                            );
-                                            if (ok && mounted) setState(() {
-                                              p['status'] = 'rejected';
-                                            });
-                                          },
-                                          icon: const Icon(
-                                            Icons.highlight_off,
-                                            color: Colors.redAccent,
-                                          ),
-                                          label: const Text(
-                                            'Reject',
-                                            style: TextStyle(color: Colors.redAccent),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
+              ),
+            ],
           ),
         ),
       ),

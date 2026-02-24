@@ -5,21 +5,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../config/api_config.dart';
 import 'user_profile.dart';
-import '../../services/notifications_service.dart';
-import '../../models/notification_item.dart';
 import 'payment_success_page.dart';
 import 'payment_method_selection.dart';
-
-// Normalize utility type to match dashboard provider names
-String _normalizeUtilityType(String utilityType) {
-  final lower = utilityType.toLowerCase();
-  if (lower == 'electricity') return 'kseb';
-  if (lower == 'water') return 'water';
-  if (lower == 'gas') return 'gas';
-  if (lower == 'wifi') return 'wifi';
-  if (lower == 'dth') return 'dth';
-  return lower;
-}
 
 class BillPaymentPage extends StatefulWidget {
   final bool useHeader;
@@ -35,7 +22,6 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
   final Set<int> _selectedIndices = <int>{};
   bool _isSubmitting = false;
   final Map<String, String> _statusByBillId = <String, String>{};
-  final NotificationsService _notifications = NotificationsService();
   bool _statusesInitialized = false;
 
   @override
@@ -161,88 +147,11 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
       final prefs = await SharedPreferences.getInstance();
       final username = prefs.getString('user_username') ?? '';
 
-      final List<NotificationItem> toNotify = [];
       if (_statusesInitialized) {
         newStatuses.forEach((billId, newStatus) {
           final oldStatus = _statusByBillId[billId];
-          if (oldStatus != null && newStatus != oldStatus) {
-            final latestEntry = latest[billId] ?? const <String, dynamic>{};
-            final amountStr = (latestEntry['amount'] ?? '').toString();
-            final methodCode = (latestEntry['payment_method'] ?? '').toString();
-            final methodLabel = _labelForMethod(methodCode);
-            
-            // Get utility type from bill data
-            final bill = _bills.firstWhere(
-              (b) => (b['bill_id'] ?? '').toString() == billId,
-              orElse: () => const <String, dynamic>{},
-            );
-            final rawUtilityType = (bill['utility_type'] ?? '').toString();
-            final utilityType = _normalizeUtilityType(rawUtilityType);
-            
-            if (newStatus == 'approved') {
-              // Notification for user
-              toNotify.add(
-                NotificationItem(
-                  id: 'payment_approved_${username}_$billId',
-                  type: 'payment_approved',
-                  title: 'Payment approved',
-                  message:
-                      'Invoice $billId approved • Amount INR $amountStr via $methodLabel',
-                  timestamp: DateTime.now(),
-                  username: username,
-                  utilityType: utilityType,
-                ),
-              );
-              
-              // Notification for utility authority
-              if (utilityType.isNotEmpty) {
-                toNotify.add(
-                  NotificationItem(
-                    id: 'payment_approved_utility_${utilityType}_$billId',
-                    type: 'payment_approved',
-                    title: 'Payment Approved',
-                    message:
-                        'User $username payment approved for Invoice $billId • Amount INR $amountStr',
-                    timestamp: DateTime.now(),
-                    username: 'utility_$utilityType',
-                    utilityType: utilityType,
-                  ),
-                );
-              }
-            } else if (newStatus == 'rejected') {
-              // Notification for user
-              toNotify.add(
-                NotificationItem(
-                  id: 'payment_rejected_${username}_$billId',
-                  type: 'payment_rejected',
-                  title: 'Payment rejected',
-                  message:
-                      'Invoice $billId was rejected. Amount credited to your wallet.',
-                  timestamp: DateTime.now(),
-                  username: username,
-                  utilityType: utilityType,
-                ),
-              );
-              
-              // Notification for utility authority
-              if (utilityType.isNotEmpty) {
-                toNotify.add(
-                  NotificationItem(
-                    id: 'payment_rejected_utility_${utilityType}_$billId',
-                    type: 'payment_rejected',
-                    title: 'Payment Rejected',
-                    message:
-                        'User $username payment rejected for Invoice $billId • Amount INR $amountStr',
-                    timestamp: DateTime.now(),
-                    username: 'utility_$utilityType',
-                    utilityType: utilityType,
-                  ),
-                );
-              }
-              
-              // Also fetch and show updated wallet balance
-              _showUpdatedWalletBalance();
-            }
+          if (oldStatus != null && newStatus != oldStatus && newStatus == 'rejected') {
+            _showUpdatedWalletBalance();
           }
         });
       }
@@ -254,9 +163,6 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
         _statusesInitialized = true;
       });
 
-      for (final n in toNotify) {
-        await _notifications.addUnique(n);
-      }
     } catch (_) {
       // ignore
     }
@@ -391,9 +297,6 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
         final amountStr = (bill['total_amount'] ?? '').toString();
         final amount =
             double.tryParse(amountStr.replaceAll(',', '').trim()) ?? 0.0;
-        final rawUtilityType = (bill['utility_type'] ?? '').toString();
-        final utilityType = _normalizeUtilityType(rawUtilityType);
-        
         final uri = Uri.parse('${ApiConfig.baseUrl}/payments/add/');
         final resp = await http.post(
           uri,
@@ -407,37 +310,6 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
         if (resp.statusCode == 201) {
           success += 1;
           _statusByBillId[id] = 'pending';
-          final methodLabel = _labelForMethod(method);
-          
-          // Notification for user
-          await _notifications.addUnique(
-            NotificationItem(
-              id: 'payment_initiated_${username}_$id',
-              type: 'payment_initiated',
-              title: 'Payment initiated',
-              message:
-                  'Invoice $id • Amount INR ${amount.toStringAsFixed(2)} via $methodLabel',
-              timestamp: DateTime.now(),
-              username: username,
-              utilityType: utilityType,
-            ),
-          );
-          
-          // Notification for utility authority
-          if (utilityType.isNotEmpty) {
-            await _notifications.addUnique(
-              NotificationItem(
-                id: 'payment_initiated_utility_${utilityType}_$id',
-                type: 'payment_initiated',
-                title: 'Payment Received',
-                message:
-                    'User $username initiated payment for Invoice $id • Amount INR ${amount.toStringAsFixed(2)}',
-                timestamp: DateTime.now(),
-                username: 'utility_$utilityType',
-                utilityType: utilityType,
-              ),
-            );
-          }
         }
       }
       if (!mounted) return;
@@ -505,111 +377,210 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
   }
 
   Widget _buildList() {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header title handled in curved header; list starts directly
-            // Build visible indices excluding fully paid (approved) bills
-            Builder(
-              builder: (context) {
-                final List<int> visibleIndices = [];
-                for (int i = 0; i < _bills.length; i++) {
-                  final id = (_bills[i]['bill_id'] ?? '').toString();
-                  final status = _statusByBillId[id];
-                  if (status == 'approved') continue; // hide completed payments
-                  visibleIndices.add(i);
-                }
-                if (_bills.isEmpty || visibleIndices.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('No payable bills'),
-                  );
-                }
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: visibleIndices.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, idx) {
-                    final index = visibleIndices[idx];
-                    final bill = _bills[index];
-                    final id = (bill['bill_id'] ?? '').toString();
-                    final type = (bill['utility_type'] ?? '').toString();
-                    final amount = (bill['total_amount'] ?? '').toString();
-                    final dateText =
-                        (bill['due_date'] ?? bill['created_at'] ?? '')
-                            .toString();
-                    final status = _statusByBillId[id];
-                    final isSelected = _selectedIndices.contains(index);
-                    return CheckboxListTile(
-                      value: isSelected,
-                      onChanged: (checked) => (status == 'pending')
-                          ? null
-                          : _onToggle(index, checked ?? false),
-                      title: Text('Invoice $id'),
-                      subtitle: Text(
-                        '$type • ${dateText.isEmpty ? '-' : dateText}${status == null ? '' : ' • Status: ${_formatStatus(status)}'}',
+    final List<int> visibleIndices = [];
+    for (int i = 0; i < _bills.length; i++) {
+      final id = (_bills[i]['bill_id'] ?? '').toString();
+      final status = _statusByBillId[id];
+      if (status == 'approved') continue; // hide completed payments
+      visibleIndices.add(i);
+    }
+
+    if (_bills.isEmpty || visibleIndices.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(
+          child: Text(
+            'No payable bills',
+            style: TextStyle(fontSize: 16, color: Colors.black54),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: visibleIndices.map((index) {
+        final bill = _bills[index];
+        final id = (bill['bill_id'] ?? '').toString();
+        final type = (bill['utility_type'] ?? '').toString();
+        final amount = (bill['total_amount'] ?? '').toString();
+        final dateText = (bill['created_at'] ?? '').toString();
+        final status = _statusByBillId[id];
+        final isSelected = _selectedIndices.contains(index);
+        final isPending = status == 'pending';
+
+        return GestureDetector(
+          onTap: isPending ? null : () => _onToggle(index, !isSelected),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: isSelected
+                  ? Border.all(color: const Color.fromARGB(255, 1, 45, 83), width: 2)
+                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Invoice ID
+                Text(
+                  'Invoice $id',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Utility type with icon
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      secondary: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Icon(
+                        Icons.receipt_long,
+                        size: 18,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            amount.isEmpty ? '' : '₹ $amount',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            '$type +',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
                           ),
+                          if (dateText.isNotEmpty)
+                            Text(
+                              dateText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
                         ],
                       ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    );
-                  },
-                );
-              },
+                    ),
+                  ],
+                ),
+                if (status != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: status == 'pending'
+                          ? Colors.orange.shade50
+                          : status == 'rejected'
+                              ? Colors.red.shade50
+                              : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _formatStatus(status),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: status == 'pending'
+                            ? Colors.orange.shade700
+                            : status == 'rejected'
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      }).toList(),
     );
   }
 
   Widget _buildContent() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildList(),
-        const SizedBox(height: 12),
-        SizedBox(
+        const SizedBox(height: 20),
+        // Pay Button
+        Container(
           width: double.infinity,
-          child: ElevatedButton(
-            onPressed: (_selectedIndices.isEmpty || _isSubmitting)
-                ? null
-                : _onPay,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+          height: 50,
+          decoration: BoxDecoration(
+            color: (_selectedIndices.isEmpty || _isSubmitting)
+                ? Colors.grey.shade400
+                : Colors.blue.shade600,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: (_selectedIndices.isEmpty || _isSubmitting)
+                ? []
+                : [
+                    BoxShadow(
+                      color: const Color.fromARGB(255, 2, 44, 79).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
-                  )
-                : const Text('Pay'),
+                  ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: (_selectedIndices.isEmpty || _isSubmitting) ? null : _onPay,
+              child: Center(
+                child: _isSubmitting
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Pay',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
           ),
         ),
         if (_isSubmitting)
           const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              'Waiting for approval…',
-              style: TextStyle(color: Colors.black54),
+            padding: EdgeInsets.only(top: 12),
+            child: Center(
+              child: Text(
+                'Waiting for approval…',
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 13,
+                ),
+              ),
             ),
           ),
       ],
@@ -633,65 +604,103 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    final content = Padding(
-      padding: const EdgeInsets.all(16),
-      child: _loading
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          : _buildContent(),
-    );
-
     if (!widget.useHeader) {
-      return SingleChildScrollView(child: content);
+      return SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: _loading
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              : _buildContent(),
+        ),
+      );
     }
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: AppBar(
-        title: const Text('Payments'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).maybePop(),
-          tooltip: 'Back',
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        elevation: 2,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            alignment: Alignment.centerLeft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'My bill',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+      backgroundColor: Colors.white,
+      body: Column(
+        children: [
+          // Header with curved bottom
+          ClipPath(
+            clipper: PaymentWaveClipper(),
+            child: Container(
+              height: 180,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [const Color.fromARGB(255, 1, 36, 64), const Color.fromARGB(255, 0, 58, 116)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top bar with title and icons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Payments',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.refresh, color: Colors.white, size: 24),
+                                onPressed: _loadUserBills,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.search, color: Colors.white, size: 24),
+                                onPressed: () {},
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      // Amount
+                      Text(
+                        '₹ ${_formatSelectedTotal()}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatSelectedTotal(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+          // Content area
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: _loading
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  : _buildContent(),
+            ),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(16), child: content)),
       bottomNavigationBar: CurvedNavigationBar(
         items: [
           Icon(
@@ -718,7 +727,7 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
         index: 1,
         color: Theme.of(context).colorScheme.primary,
         buttonBackgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white,
         animationCurve: Curves.easeInOut,
         animationDuration: const Duration(milliseconds: 300),
         onTap: (index) {
@@ -740,4 +749,25 @@ class _BillPaymentPageState extends State<BillPaymentPage> {
       ),
     );
   }
+}
+
+// Custom clipper for curved header
+class PaymentWaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.lineTo(0, size.height - 40);
+    path.quadraticBezierTo(
+      size.width / 2,
+      size.height,
+      size.width,
+      size.height - 40,
+    );
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }

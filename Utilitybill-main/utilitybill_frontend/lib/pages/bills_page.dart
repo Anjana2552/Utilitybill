@@ -340,269 +340,277 @@ class _AdminBillsListPageState extends State<AdminBillsListPage> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetchBills,
-          child: CurvedHeaderPage(
-            title: 'Utility Bills',
-            headerHeight: 180,
-            titleAlignment: HeaderTitleAlignment.left,
-            bottomLeft: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _filterOpen
-                  ? Container(
-                      key: const ValueKey('open'),
-                      constraints: const BoxConstraints(maxWidth: 640),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          SizedBox(
-                            width: 220,
-                            child: TextField(
-                              controller: _searchController,
-                              onChanged: _updateSearch,
-                              decoration: const InputDecoration(
-                                prefixIcon: Icon(Icons.search),
-                                hintText: 'Search bills',
-                                border: OutlineInputBorder(),
-                                isDense: true,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: _filterOpen
+                      ? Container(
+                          key: const ValueKey('open'),
+                          width: MediaQuery.of(context).size.width,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 8,
                               ),
-                            ),
+                            ],
                           ),
-                          DropdownButtonHideUnderline(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.black26),
-                                borderRadius: BorderRadius.circular(8),
-                                color: Colors.white,
-                              ),
-                              child: DropdownButton<String>(
-                                value:
-                                    _utilityTypeOptions().contains(
-                                      _selectedUtility,
-                                    )
-                                    ? _selectedUtility
-                                    : 'All Utilities',
-                                items: _utilityTypeOptions()
-                                    .map(
-                                      (t) => DropdownMenuItem<String>(
-                                        value: t,
-                                        child: Text(t),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) {
-                                  if (v == null) return;
-                                  setState(() => _selectedUtility = v);
-                                },
-                              ),
-                            ),
-                          ),
-                          DropdownButtonHideUnderline(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.black26),
-                                borderRadius: BorderRadius.circular(8),
-                                color: Colors.white,
-                              ),
-                              child: DropdownButton<int>(
-                                value: _selectedMonth,
-                                items: List.generate(
-                                  13,
-                                  (i) => DropdownMenuItem<int>(
-                                    value: i,
-                                    child: Text(_monthLabel(i)),
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              SizedBox(
+                                width: 180,
+                                child: TextField(
+                                  controller: _searchController,
+                                  onChanged: _updateSearch,
+                                  decoration: const InputDecoration(
+                                    prefixIcon: Icon(Icons.search),
+                                    hintText: 'Search bills',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
                                   ),
                                 ),
-                                onChanged: (v) {
-                                  if (v == null) return;
-                                  setState(() => _selectedMonth = v);
+                              ),
+                              DropdownButtonHideUnderline(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.black26),
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: Colors.white,
+                                  ),
+                                  child: DropdownButton<String>(
+                                    value:
+                                        _utilityTypeOptions().contains(
+                                          _selectedUtility,
+                                        )
+                                        ? _selectedUtility
+                                        : 'All Utilities',
+                                    items: _utilityTypeOptions()
+                                        .map(
+                                          (t) => DropdownMenuItem<String>(
+                                            value: t,
+                                            child: Text(t),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (v) {
+                                      if (v == null) return;
+                                      setState(() => _selectedUtility = v);
+                                    },
+                                  ),
+                                ),
+                              ),
+                              DropdownButtonHideUnderline(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.black26),
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: Colors.white,
+                                  ),
+                                  child: DropdownButton<int>(
+                                    value: _selectedMonth,
+                                    items: List.generate(
+                                      13,
+                                      (i) => DropdownMenuItem<int>(
+                                        value: i,
+                                        child: Text(_monthLabel(i)),
+                                      ),
+                                    ),
+                                    onChanged: (v) {
+                                      if (v == null) return;
+                                      setState(() => _selectedMonth = v);
+                                    },
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Clear',
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                    _selectedUtility = 'All Utilities';
+                                    _selectedMonth = 0;
+                                  });
                                 },
                               ),
+                              IconButton(
+                                tooltip: 'Close',
+                                icon: const Icon(Icons.close),
+                                onPressed: () {
+                                  setState(() {
+                                    _filterOpen = false;
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                    _selectedUtility = 'All Utilities';
+                                    _selectedMonth = 0;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        )
+                      : OutlinedButton.icon(
+                          key: const ValueKey('closed'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Theme.of(context).colorScheme.primary,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
-                          IconButton(
-                            tooltip: 'Clear',
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                                _selectedUtility = 'All Utilities';
-                                _selectedMonth = 0;
-                              });
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'Close',
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              setState(() {
-                                _filterOpen = false;
-                                _searchController.clear();
-                                _searchQuery = '';
-                                _selectedUtility = 'All Utilities';
-                                _selectedMonth = 0;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    )
-                  : OutlinedButton.icon(
-                      key: const ValueKey('closed'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white70),
-                      ),
-                      onPressed: () => setState(() => _filterOpen = true),
-                      icon: const Icon(Icons.search),
-                      label: const Text('Search / Filter'),
-                    ),
-            ),
-            child: Builder(
-              builder: (context) {
-                if (_loading) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                return ListView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: displayBills.length,
-                  itemBuilder: (context, index) {
-                    final bill = displayBills[index];
-                    final utilityType = (bill['utility_type'] ?? '').toString();
-                    final billId = (bill['bill_id'] ?? '').toString();
-                    final colors = _colorsForUtilityType(utilityType, billId);
-                    final createdAt = (bill['created_at'] ?? '').toString();
-                    final dateShort = _formatDateShort(createdAt);
-                    final amount = (bill['total_amount'] ?? '').toString();
-                    final consumer = (bill['consumer_name'] ?? '').toString();
-                    final trailingStatus = _statusChipForBill(bill);
+                          onPressed: () => setState(() => _filterOpen = true),
+                          icon: const Icon(Icons.search),
+                          label: const Text('Search / Filter'),
+                        ),
+                ),
+              ),
+              Expanded(
+                child: Builder(
+                  builder: (context) {
+                    if (_loading) {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: displayBills.length,
+                      itemBuilder: (context, index) {
+                        final bill = displayBills[index];
+                        final utilityType = (bill['utility_type'] ?? '').toString();
+                        final billId = (bill['bill_id'] ?? '').toString();
+                        final colors = _colorsForUtilityType(utilityType, billId);
+                        final createdAt = (bill['created_at'] ?? '').toString();
+                        final dateShort = _formatDateShort(createdAt);
+                        final amount = (bill['total_amount'] ?? '').toString();
+                        final consumer = (bill['consumer_name'] ?? '').toString();
+                        final trailingStatus = _statusChipForBill(bill);
 
-                    return Container(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: colors,
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colors.first.withValues(alpha: 0.25),
-                            blurRadius: 10,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                _iconForUtility(utilityType),
-                                color: Colors.white,
-                              ),
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: colors,
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          '${utilityType.isNotEmpty ? utilityType : 'Bill'} • ${_shortBillId(billId)}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                      if (dateShort.isNotEmpty)
-                                        Text(
-                                          dateShort,
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                    ],
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors.first.withOpacity(0.25),
+                                blurRadius: 10,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    shape: BoxShape.circle,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    consumer,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                    ),
+                                  child: Icon(
+                                    _iconForUtility(utilityType),
+                                    color: Colors.white,
                                   ),
-                                  const SizedBox(height: 6),
-                                  Row(
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(
-                                        Icons.attach_money,
-                                        size: 16,
-                                        color: Colors.white70,
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              '${utilityType.isNotEmpty ? utilityType : 'Bill'} • ${_shortBillId(billId)}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                          if (dateShort.isNotEmpty)
+                                            Text(
+                                              dateShort,
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(height: 4),
                                       Text(
-                                        amount,
+                                        consumer,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
                                           color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
                                         ),
                                       ),
-                                      const Spacer(),
-                                      // Keep existing status chip for semantic color
-                                      trailingStatus,
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.attach_money,
+                                            size: 16,
+                                            color: Colors.white70,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            amount,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          trailingStatus,
+                                        ],
+                                      ),
                                     ],
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

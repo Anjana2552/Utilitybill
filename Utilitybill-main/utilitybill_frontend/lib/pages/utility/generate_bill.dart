@@ -40,7 +40,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
   final _gasHouseNumberCtrl = TextEditingController();
   // WiFi-specific controllers
   final _wifiCustomerIdCtrl = TextEditingController();
-  String _selectedWifiPlan = 'Basic';
+  String _selectedWifiPlan = 'Basic - ₹299/month';
   final _wifiHouseNumberCtrl = TextEditingController();
   final _wifiProviderCtrl = TextEditingController();
   // DTH-specific controllers
@@ -116,15 +116,15 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       _utilityType = 'Water';
       _rateCtrl.text = '10';
     } else if (username.contains('gas')) {
-      _providerName = 'gas';
+      _providerName = null; // Don't filter by provider for Gas (multiple providers)
       _utilityType = 'Gas';
       _rateCtrl.text = '8';
     } else if (username.contains('wifi')) {
-      _providerName = 'wifi';
+      _providerName = null; // Don't filter by provider for WiFi
       _utilityType = 'WiFi';
       _rateCtrl.text = '';
     } else if (username.contains('dth')) {
-      _providerName = 'dth';
+      _providerName = null; // Don't filter by provider for DTH
       _utilityType = 'DTH';
       _rateCtrl.text = '';
     }
@@ -234,9 +234,14 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
   }
 
   double? _amountFromPlan(String planLabel) {
-    final match = RegExp(r'^(\d+(?:\.\d+)?)').firstMatch(planLabel.trim());
+    // Match digits after ₹ symbol or anywhere in the string
+    final match = RegExp(r'₹(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)').firstMatch(planLabel.trim());
     if (match != null) {
-      return double.tryParse(match.group(1)!);
+      // Try first capture group (after ₹), then fallback to second group
+      final amount = match.group(1) ?? match.group(2);
+      if (amount != null) {
+        return double.tryParse(amount);
+      }
     }
     return null;
   }
@@ -297,6 +302,15 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       _unitsCtrl.clear();
       _totalCtrl.clear();
       
+      // Restore amount for package-based utilities (WiFi/DTH)
+      if (_isWifi) {
+        final amt = _amountFromPlan(_selectedWifiPlan) ?? 299.0;
+        _totalCtrl.text = amt.toStringAsFixed(2);
+      } else if (_isDth) {
+        final amt = _amountFromPlan(_selectedDthPackage) ?? 299.0;
+        _totalCtrl.text = amt.toStringAsFixed(2);
+      }
+      
       // Prefill previous reading smartly (history -> backend -> baseline)
       // This will fetch the specific consumer's last reading
       _prefillPreviousReadingSmart();
@@ -353,8 +367,8 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       }
       _billIdCtrl.text = _generateBillId();
       if (_isWifi) {
-        _selectedWifiPlan = 'Basic';
-        _totalCtrl.text = '799.00';
+        _selectedWifiPlan = 'Basic - ₹299/month';
+        _totalCtrl.text = '299.00';
       } else if (_isDth) {
         _selectedDthPackage = '299 - 15 days';
         final amt = _amountFromPlan(_selectedDthPackage) ?? 0.0;
@@ -637,19 +651,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       final billId = payload['bill_id']?.toString() ?? '';
       final amount = payload['total_amount']?.toString() ?? '0';
       final utilityName = _utilityType;
-      
-      final notification = NotificationItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: 'bill_generated',
-        title: 'New $utilityName Bill Generated',
-        message: 'Bill ID: $billId - Amount: ₹$amount. Please pay before the due date.',
-        timestamp: DateTime.now(),
-        username: consumer.username,
-        utilityType: null, // User notifications don't filter by utilityType
-        read: false,
-      );
-      
-      await _notifications.addUnique(notification);
+      // Backend now creates notifications automatically when bill is generated
     } catch (e) {
       // Silently handle errors
     }
@@ -671,7 +673,9 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
           : '';
       _dueDate = null;
       if (_isWifi) {
-        _totalCtrl.text = '799.00';
+        // Calculate amount based on selected WiFi plan
+        final amt = _amountFromPlan(_selectedWifiPlan) ?? 299.0;
+        _totalCtrl.text = amt.toStringAsFixed(2);
       } else if (_isDth) {
         final amt = _amountFromPlan(_selectedDthPackage) ?? 0.0;
         _totalCtrl.text = amt.toStringAsFixed(2);
@@ -686,7 +690,7 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
       _gasConsumerIdCtrl.clear();
       _gasHouseNumberCtrl.clear();
       _wifiCustomerIdCtrl.clear();
-      _selectedWifiPlan = 'Basic';
+      _selectedWifiPlan = 'Basic - ₹299/month';
       _wifiHouseNumberCtrl.clear();
       _wifiProviderCtrl.clear();
       _dthSubscriberIdCtrl.clear();
@@ -784,19 +788,35 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
 
               // Consumer Name dropdown
               DropdownButtonFormField<String>(
-                initialValue: _selectedConsumerName,
-                items: _consumers
-                    .map(
-                      (c) => DropdownMenuItem<String>(
-                        value: c.name,
-                        child: Text(c.name.isNotEmpty ? c.name : 'Unknown'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _loadingConsumers ? null : _onSelectConsumer,
-                decoration: const InputDecoration(
+                value: _selectedConsumerName,
+                items: _consumers.isEmpty
+                    ? [
+                        DropdownMenuItem<String>(
+                          value: null,
+                          child: Text(
+                            'No ${_utilityType} consumers found',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        )
+                      ]
+                    : _consumers
+                        .map(
+                          (c) => DropdownMenuItem<String>(
+                            value: c.name,
+                            child: Text(c.name.isNotEmpty ? c.name : 'Unknown'),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (_loadingConsumers || _consumers.isEmpty)
+                    ? null
+                    : _onSelectConsumer,
+                decoration: InputDecoration(
                   labelText: 'Consumer Name',
                   prefixIcon: Icon(Icons.person_outline),
+                  helperText: _consumers.isEmpty
+                      ? 'Users must register their ${_utilityType} utility first'
+                      : null,
+                  helperMaxLines: 2,
                 ),
                 validator: (v) =>
                     (v == null || v.isEmpty) ? 'Select a consumer' : null,
@@ -851,11 +871,21 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: 'Basic',
-                  items: const ['Basic']
+                  value: _selectedWifiPlan,
+                  items: const [
+                    'Basic - ₹299/month',
+                    'Standard - ₹599/month',
+                    'Premium - ₹999/month',
+                    'Ultra - ₹1499/month',
+                  ]
                       .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                       .toList(),
-                  onChanged: null,
+                  onChanged: (v) => setState(() {
+                    _selectedWifiPlan = v ?? 'Basic - ₹299/month';
+                    // Auto-fill amount based on plan
+                    final amt = _amountFromPlan(_selectedWifiPlan) ?? 0.0;
+                    _totalCtrl.text = amt.toStringAsFixed(2);
+                  }),
                   decoration: const InputDecoration(
                     labelText: 'Selected Plan',
                     prefixIcon: Icon(Icons.wifi),

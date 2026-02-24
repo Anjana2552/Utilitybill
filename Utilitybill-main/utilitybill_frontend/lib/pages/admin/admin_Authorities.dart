@@ -128,127 +128,122 @@ class _AdminAuthoritiesPageState extends State<AdminAuthoritiesPage> {
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const BlueGreenHeader(height: 200, title: 'Authorities'),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _fetchAuthorities,
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _loading ? 1 : _authorities.length,
+        child: RefreshIndicator(
+          onRefresh: _fetchAuthorities,
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: _authorities.length,
                   itemBuilder: (context, index) {
-                    if (_loading) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    }
                     final auth = _authorities[index];
-                    return Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    final name = auth['name']?.toString() ?? 'Authority';
+                    final initials = name.isNotEmpty
+                        ? name.split(' ').map((e) => e[0]).join()
+                        : 'A';
+                    final utilityType = auth['utility_type']?.toString() ?? '—';
+                    
+                    final colors = [
+                      const Color(0xFF9C7DFF),
+                      const Color(0xFF5DADE2),
+                      const Color(0xFF52D4A4),
+                      const Color(0xFFFFA500),
+                      const Color(0xFFFF6B9D),
+                    ];
+                    final avatarColor = colors[index % colors.length];
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(
-                                  Icons.account_balance,
-                                  color: Theme.of(context).colorScheme.secondary,
+                                Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: avatarColor,
+                                    borderRadius: BorderRadius.circular(26),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      initials.toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 16),
                                 Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF2D3142),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        auth['email']?.toString() ?? '',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: avatarColor.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                   child: Text(
-                                    auth['name']?.toString() ?? 'Authority',
-                                    style: const TextStyle(
-                                      fontSize: 16,
+                                    utilityType,
+                                    style: TextStyle(
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  auth['utility_type']?.toString() ?? '—',
-                                  style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.email_outlined,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    auth['email']?.toString() ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black87,
+                                      color: avatarColor,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.phone_outlined,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  auth['phone']?.toString() ?? '',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(
-                                  Icons.location_on_outlined,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    auth['address']?.toString() ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 TextButton.icon(
                                   onPressed: () => _onEdit(auth),
-                                  icon: const Icon(Icons.edit_outlined),
+                                  icon: const Icon(Icons.edit_outlined, size: 18),
                                   label: const Text('Edit'),
                                 ),
                                 const SizedBox(width: 8),
@@ -256,6 +251,7 @@ class _AdminAuthoritiesPageState extends State<AdminAuthoritiesPage> {
                                   onPressed: () => _onDelete(auth),
                                   icon: const Icon(
                                     Icons.delete_outline,
+                                    size: 18,
                                     color: Colors.redAccent,
                                   ),
                                   label: const Text(
@@ -271,9 +267,6 @@ class _AdminAuthoritiesPageState extends State<AdminAuthoritiesPage> {
                     );
                   },
                 ),
-              ),
-            ),
-          ],
         ),
       ),
     );

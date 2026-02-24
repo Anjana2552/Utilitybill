@@ -168,17 +168,56 @@ class _ChatPageState extends State<ChatPage> {
           _active = a;
           _loading = false;
         });
+        await _loadThread(a);
       } else {
         setState(() {
           _authorities = list;
           _loading = false;
         });
+        // Load unread counts
+        await _loadUnreadCounts();
       }
     } catch (e) {
       setState(() {
         _loading = false;
         _error = 'Error: $e';
       });
+    }
+  }
+
+  Future<void> _loadUnreadCounts() async {
+    try {
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/chat/unread-counts/?username=${Uri.encodeQueryComponent(_username)}&role=${Uri.encodeQueryComponent(_myRole)}',
+      );
+      final resp = await http.get(uri, headers: {'Content-Type': 'application/json'});
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final unreadList = (data['unread_counts'] as List<dynamic>?) ?? [];
+        final Map<String, int> unreadMap = {};
+        for (final item in unreadList) {
+          final m = item as Map<String, dynamic>;
+          final key = (m['key'] ?? '').toString();
+          final count = (m['unread_count'] ?? 0) as int;
+          unreadMap[key] = count;
+        }
+        
+        // Update authorities with unread counts
+        setState(() {
+          _authorities = _authorities.map((a) {
+            final unread = unreadMap[a.key] ?? 0;
+            return _Authority(
+              key: a.key,
+              title: a.title,
+              utilityType: a.utilityType,
+              unreadCount: unread,
+            );
+          }).toList();
+        });
+      }
+    } catch (e) {
+      // Silently fail - unread counts are not critical
+      print('Failed to load unread counts: $e');
     }
   }
 
@@ -208,6 +247,18 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {
       _active = a;
       _threads.putIfAbsent(a.key, () => <_Message>[]);
+      // Reset unread count when opening
+      _authorities = _authorities.map((auth) {
+        if (auth.key == a.key) {
+          return _Authority(
+            key: auth.key,
+            title: auth.title,
+            utilityType: auth.utilityType,
+            unreadCount: 0,
+          );
+        }
+        return auth;
+      }).toList();
     });
     _loadThread(a);
   }
@@ -608,12 +659,19 @@ class _ConversationView extends StatelessWidget {
                       ),
                       child: TextField(
                         controller: controller,
-                        style: const TextStyle(color: Colors.white),
+                        style: const TextStyle(
+                          color: Color(0xFF2D3142),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
                         decoration: const InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
-                          hintText: 'Ok. Let me check',
-                          hintStyle: TextStyle(color: Colors.white70),
+                          hintText: 'Type your message...',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF7B7B8B),
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ),
@@ -668,10 +726,12 @@ class _Authority {
   final String key;
   final String title;
   final String utilityType;
+  final int unreadCount;
   const _Authority({
     required this.key,
     required this.title,
     required this.utilityType,
+    this.unreadCount = 0,
   });
 }
 
@@ -759,7 +819,29 @@ class _AuthorityTile extends StatelessWidget {
             authority.utilityType.isEmpty ? 'Utility' : authority.utilityType,
             style: const TextStyle(color: Colors.white70),
           ),
-          trailing: const Icon(Icons.chevron_right, color: Colors.white),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (authority.unreadCount > 0)
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    authority.unreadCount > 99 ? '99+' : '${authority.unreadCount}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              const Icon(Icons.chevron_right, color: Colors.white),
+            ],
+          ),
           onTap: onTap,
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:fl_chart/fl_chart.dart';
 import '../../config/api_config.dart';
 import '../../widgets/theme_header.dart';
 import 'admin_Authorities.dart';
@@ -38,14 +39,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _handleLogout() async {
     final prefs = await SharedPreferences.getInstance();
+    // Reload to get latest data from persistent storage
+    await prefs.reload();
     final reviews = prefs.getString('saved_reviews_v1');
     final notifications = prefs.getString('notifications_list_v1');
+    final paymentMethods = prefs.getString('saved_payment_methods_v1');
     await prefs.clear();
     if (reviews != null && reviews.isNotEmpty) {
       await prefs.setString('saved_reviews_v1', reviews);
     }
     if (notifications != null && notifications.isNotEmpty) {
       await prefs.setString('notifications_list_v1', notifications);
+    }
+    if (paymentMethods != null && paymentMethods.isNotEmpty) {
+      await prefs.setString('saved_payment_methods_v1', paymentMethods);
     }
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/');
@@ -254,6 +261,131 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
         ),
+        bottomNavigationBar: _selectedIndex == 0
+            ? Container(
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                  child: BottomNavigationBar(
+                    type: BottomNavigationBarType.fixed,
+                    backgroundColor: Colors.white,
+                    selectedFontSize: 12,
+                    unselectedFontSize: 12,
+                    showSelectedLabels: true,
+                    showUnselectedLabels: true,
+                    onTap: (index) {
+                      if (index == 0) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AdminUsersListPage(),
+                          ),
+                        );
+                      } else if (index == 1) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AdminBillsListPage(),
+                          ),
+                        );
+                      } else if (index == 2) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AdminAuthoritiesPage(),
+                          ),
+                        );
+                      } else if (index == 3) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const AdminPaymentReportsPage(),
+                          ),
+                        );
+                      }
+                    },
+                    items: [
+                      BottomNavigationBarItem(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFEBEE),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.group,
+                            color: Color(0xFFE91E63),
+                            size: 24,
+                          ),
+                        ),
+                        label: 'Users',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE3F2FD),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.receipt_long,
+                            color: Color(0xFF2196F3),
+                            size: 24,
+                          ),
+                        ),
+                        label: 'Bills',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3E5F5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.account_balance,
+                            color: Color(0xFF9C27B0),
+                            size: 24,
+                          ),
+                        ),
+                        label: 'Authorities',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.payment,
+                            color: Color(0xFF4CAF50),
+                            size: 24,
+                          ),
+                        ),
+                        label: 'Payments',
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : null,
       ),
     );
   }
@@ -627,6 +759,132 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             );
                           },
                         ),
+                      const SizedBox(height: 16),
+                      // User Statistics Chart
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'User Statistics',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              SizedBox(
+                                height: 280,
+                                child: _loadingCounts
+                                    ? const Center(child: CircularProgressIndicator())
+                                    : Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 2,
+                                            child: PieChart(
+                                              PieChartData(
+                                                sectionsSpace: 2,
+                                                centerSpaceRadius: 50,
+                                                sections: [
+                                                  PieChartSectionData(
+                                                    value: _usersCount.toDouble(),
+                                                    title: '$_usersCount',
+                                                    color: const Color(0xFFE91E63),
+                                                    radius: 60,
+                                                    titleStyle: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  PieChartSectionData(
+                                                    value: _authoritiesCount.toDouble(),
+                                                    title: '$_authoritiesCount',
+                                                    color: const Color(0xFF9C27B0),
+                                                    radius: 60,
+                                                    titleStyle: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  PieChartSectionData(
+                                                    value: _totalBillsCount.toDouble(),
+                                                    title: '$_totalBillsCount',
+                                                    color: const Color(0xFF2196F3),
+                                                    radius: 60,
+                                                    titleStyle: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  PieChartSectionData(
+                                                    value: _totalPaymentsCount.toDouble(),
+                                                    title: '$_totalPaymentsCount',
+                                                    color: const Color(0xFF4CAF50),
+                                                    radius: 60,
+                                                    titleStyle: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ],
+                                                pieTouchData: PieTouchData(
+                                                  touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                                    // Handle touch events if needed
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 20),
+                                          Expanded(
+                                            flex: 1,
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                _LegendItem(
+                                                  color: const Color(0xFFE91E63),
+                                                  label: 'Users',
+                                                  value: _usersCount.toString(),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                _LegendItem(
+                                                  color: const Color(0xFF9C27B0),
+                                                  label: 'Authorities',
+                                                  value: _authoritiesCount.toString(),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                _LegendItem(
+                                                  color: const Color(0xFF2196F3),
+                                                  label: 'Bills',
+                                                  value: _totalBillsCount.toString(),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                _LegendItem(
+                                                  color: const Color(0xFF4CAF50),
+                                                  label: 'Payments',
+                                                  value: _totalPaymentsCount.toString(),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -745,6 +1003,57 @@ class _StatBox extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+  final String value;
+
+  const _LegendItem({
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2D3142),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

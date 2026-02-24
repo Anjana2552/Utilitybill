@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/notifications_service.dart';
-import '../services/notification_generator.dart';
 import '../models/notification_item.dart';
+import 'users/bill_payment.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationsPage extends StatefulWidget {
 	final String? utilityType; // If provided, load notifications for this utility type
@@ -14,7 +15,6 @@ class NotificationsPage extends StatefulWidget {
 
 class _NotificationsPageState extends State<NotificationsPage> {
 	final _service = NotificationsService();
-	final _generator = NotificationGenerator();
 	List<NotificationItem> _items = [];
 	bool _loading = true;
 
@@ -26,27 +26,26 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
 	Future<void> _load() async {
 		setState(() => _loading = true);
-		// Generate all notifications before loading (only for regular users, not utilities)
-		if (widget.utilityType == null) {
-			await _generator.generateAllNotifications();
+		// Get current username
+		final prefs = await SharedPreferences.getInstance();
+		final username = prefs.getString('user_username') ?? '';
+		
+		if (username.isEmpty) {
+			setState(() {
+				_items = [];
+				_loading = false;
+			});
+			return;
 		}
-		final list = widget.utilityType != null
-				? await _service.loadForUtility(widget.utilityType!)
-				: await _service.load();
+		
+		final list = await _service.loadFromBackend(username);
 		if (!mounted) return;
-		
-		// Debug: Print notification details for utility authorities
-		if (widget.utilityType != null) {
-			print('=== Utility Notifications Debug ===');
-			print('Filtering for utilityType: ${widget.utilityType}');
-			print('Found ${list.length} notifications');
-			for (final n in list) {
-				print('  - ${n.title}: utilityType=${n.utilityType}, username=${n.username}');
-			}
-		}
-		
+		final utilityType = widget.utilityType;
+		final filtered = (utilityType == null || utilityType.isEmpty)
+				? list
+				: list.where((n) => (n.utilityType ?? '').toLowerCase() == utilityType.toLowerCase()).toList();
 		setState(() {
-			_items = list;
+			_items = filtered;
 			_loading = false;
 		});
 	}
@@ -60,6 +59,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
 					icon: const Icon(Icons.arrow_back),
 					onPressed: () => Navigator.of(context).pop(),
 				),
+				actions: [
+					IconButton(
+						icon: const Icon(Icons.refresh),
+						onPressed: _load,
+						tooltip: 'Refresh',
+					),
+				],
 				backgroundColor: Theme.of(context).colorScheme.primary,
 				foregroundColor: Theme.of(context).colorScheme.onPrimary,
 			),
@@ -70,17 +76,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
 						child: CircularProgressIndicator(),
 					),
 				)
-				: (_items.isEmpty
-					? const Padding(
-						padding: EdgeInsets.all(16.0),
-						child: _EmptyNotificationCard(),
-					)
-					: SingleChildScrollView(
-						child: Padding(
+				: RefreshIndicator(
+					onRefresh: _load,
+					child: _items.isEmpty
+						? ListView(
 							padding: const EdgeInsets.all(16.0),
-							child: Column(
-								crossAxisAlignment: CrossAxisAlignment.start,
-								children: [
+							children: const [_EmptyNotificationCard()],
+						)
+						: ListView(
+							padding: const EdgeInsets.all(16.0),
+							children: [
 									// Unread section
 									if (_items.any((e) => !e.read)) ...[
 										const Text('Unread', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
@@ -88,7 +93,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
 										..._items.where((n) => !n.read).map((n) => _NotificationTile(
 											n: n,
 											onMarkRead: () async {
-												await _service.markAsRead(n.id);
+												final prefs = await SharedPreferences.getInstance();
+												final username = prefs.getString('user_username') ?? '';
+												// Mark as read on backend
+												await _service.markAsReadOnBackend(n.id, username);
 												await _load();
 											},
 										)),
@@ -113,8 +121,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
 										),
 								],
 							),
-						),
-					)),
+					),
 		);
 	}
 
@@ -151,24 +158,60 @@ class _NotificationTile extends StatelessWidget {
       child: Card(
         elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: ListTile(
-          leading: Icon(_iconForType(n.type), color: Theme.of(context).colorScheme.secondary),
-          title: Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.w400 : FontWeight.w700)),
-          subtitle: Text(n.message),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_formatTime(n.timestamp), style: const TextStyle(fontSize: 12, color: Colors.black54)),
-              const SizedBox(height: 4),
-              if (!n.read)
-                Icon(Icons.brightness_1, size: 10, color: Theme.of(context).colorScheme.secondary),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(_iconForType(n.type), color: Theme.of(context).colorScheme.secondary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.w400 : FontWeight.w700, fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Text(n.message, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                        const SizedBox(height: 6),
+                        Text(_formatTime(n.timestamp), style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (!n.read)
+                    Icon(Icons.brightness_1, size: 10, color: Theme.of(context).colorScheme.secondary),
+                ],
+              ),
+              // Show "Pay Now" button for overdue bills
+              if (n.type == 'bill_overdue' && n.billId != null && n.billId!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const BillPaymentPage()),
+                      );
+                      // Mark as read when user taps Pay Now
+                      if (!n.read && onMarkRead != null) {
+                        onMarkRead!();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    child: const Text('Pay Now', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
             ],
           ),
-          onTap: () async {
-            if (!n.read && onMarkRead != null) {
-              await onMarkRead!();
-            }
-          },
         ),
       ),
     );

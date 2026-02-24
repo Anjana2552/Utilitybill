@@ -78,51 +78,7 @@ class _AdminPaymentRequestPageState extends State<AdminPaymentRequestPage> {
       );
       
       if (resp.statusCode == 200) {
-        // Create notifications for user and utility authority
-        final bill = _billById[billId];
-        if (bill != null) {
-          final username = (bill['consumer_name'] ?? '').toString();
-          final rawUtilityType = (bill['utility_type'] ?? '').toString();
-          final utilityType = _normalizeUtilityType(rawUtilityType);
-          final amount = (_pendingPayments.firstWhere(
-            (p) => p['id'] == id,
-            orElse: () => {'amount': '0'},
-          )['amount'] ?? '0').toString();
-          
-          if (username.isNotEmpty) {
-            // Notification for user
-            await _notificationService.addUnique(
-              NotificationItem(
-                id: '${approve ? 'payment_approved' : 'payment_rejected'}_${username}_$billId',
-                type: approve ? 'payment_approved' : 'payment_rejected',
-                title: approve ? 'Payment approved' : 'Payment rejected',
-                message: approve
-                    ? 'Invoice $billId approved • Amount INR $amount'
-                    : 'Invoice $billId was rejected. Amount credited to your wallet.',
-                timestamp: DateTime.now(),
-                username: username,
-                utilityType: utilityType,
-              ),
-            );
-            
-            // Notification for utility authority
-            if (utilityType.isNotEmpty) {
-              await _notificationService.addUnique(
-                NotificationItem(
-                  id: '${approve ? 'payment_approved' : 'payment_rejected'}_utility_${utilityType}_$billId',
-                  type: approve ? 'payment_approved' : 'payment_rejected',
-                  title: approve ? 'Payment Approved' : 'Payment Rejected',
-                  message: approve
-                      ? 'User $username payment approved for Invoice $billId • Amount INR $amount'
-                      : 'User $username payment rejected for Invoice $billId • Amount INR $amount',
-                  timestamp: DateTime.now(),
-                  username: 'utility_$utilityType',
-                  utilityType: utilityType,
-                ),
-              );
-            }
-          }
-        }
+        // Backend now creates notifications automatically on approve/reject
         return true;
       }
       return false;

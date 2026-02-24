@@ -4,6 +4,8 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'profiles', views.UserProfileViewSet, basename='profile')
+router.register(r'payment-methods', views.PaymentMethodViewSet, basename='payment-method')
+router.register(r'notifications', views.NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('auth/register/', views.register_user, name='register'),
@@ -12,6 +14,7 @@ urlpatterns = [
     path('auth/current-user/', views.current_user, name='current-user'),
     path('auth/request-otp/', views.request_otp, name='request-otp'),
     path('auth/verify-otp/', views.verify_otp, name='verify-otp'),
+    path('auth/reset-password-otp/', views.reset_password_otp, name='reset-password-otp'),
     path('admin/add-utility-authority/', views.add_utility_authority, name='add-utility-authority'),
     path('user-utility/add/', views.add_user_utility, name='add-user-utility'),
     path('user-utility/list/', views.list_user_utilities, name='list-user-utilities'),
@@ -32,9 +35,22 @@ urlpatterns = [
     # Wallet endpoints
     path('wallet/balance/', views.wallet_balance, name='wallet-balance'),
     path('wallet/transactions/', views.wallet_transactions, name='wallet-transactions'),
+    path('wallet/add-funds/', views.wallet_add_funds, name='wallet-add-funds'),
+    path('user-payment-methods/', views.user_payment_methods, name='user-payment-methods'),
     # Chat endpoints
     path('chat/thread/', views.chat_thread, name='chat-thread'),
     path('chat/send/', views.chat_send, name='chat-send'),
+    path('chat/unread-counts/', views.chat_unread_counts, name='chat-unread-counts'),
+    # Notifications endpoints
+    path('notifications-by-username/', views.list_notifications_by_username, name='list-notifications-by-username'),
+    path('notifications/mark-read/', views.mark_notification_read, name='mark-notification-read'),
+    path('notifications/delete/', views.delete_notification, name='delete-notification'),
+    path('notifications/diagnostic/', views.notifications_diagnostic, name='notifications-diagnostic'),
+    path('notifications/create-manual/', views.create_notification_manual, name='create-notification-manual'),
+    # Review endpoints
+    path('reviews/add/', views.add_review, name='add-review'),
+    path('reviews/list/', views.list_reviews, name='list-reviews'),
+    path('reviews/stats/', views.review_stats, name='review-stats'),
     # Admin user management
     path('admin/set-user-active/', views.set_user_active, name='set-user-active'),
     path('admin/delete-user/', views.delete_user_account, name='delete-user'),

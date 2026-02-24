@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
-    UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment, ChatMessage, Wallet, WalletTransaction
+    UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment, ChatMessage, Wallet, WalletTransaction, PaymentMethod, Notification, Review
 )
 
 
@@ -20,7 +20,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ['id', 'user', 'full_name', 'email', 'role', 'role_display', 'phone', 'house_number', 'address', 'created_at', 'updated_at']
+        fields = ['id', 'user', 'full_name', 'email', 'role', 'role_display', 'phone', 'house_number', 'address', 'utility_type', 'created_at', 'updated_at']
         read_only_fields = ['id', 'role', 'created_at', 'updated_at']
 
 
@@ -119,3 +119,28 @@ class WalletTransactionSerializer(serializers.ModelSerializer):
         model = WalletTransaction
         fields = ['id', 'amount', 'type', 'reason', 'payment', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    """Serializer for PaymentMethod model"""
+    class Meta:
+        model = PaymentMethod
+        fields = ['id', 'method', 'detail', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Serializer for Notification model"""
+    class Meta:
+        model = Notification
+        fields = ['id', 'notification_type', 'title', 'message', 'utility_type', 'bill_id', 'due_date', 'read', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    """Serializer for Review model"""
+    username = serializers.CharField(source='user.username', read_only=True)
+    
+    class Meta:
+        model = Review
+        fields = ['id', 'username', 'provider_name', 'utility_type', 'rating', 'message', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']

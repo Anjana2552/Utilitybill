@@ -4,33 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/api_config.dart';
 import '../../widgets/theme_header.dart';
-
-class SavedPaymentMethod {
-  final String method;
-  final String detail;
-  final DateTime createdAt;
-
-  const SavedPaymentMethod({
-    required this.method,
-    required this.detail,
-    required this.createdAt,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'method': method,
-        'detail': detail,
-        'createdAt': createdAt.toIso8601String(),
-      };
-
-  factory SavedPaymentMethod.fromJson(Map<String, dynamic> json) {
-    return SavedPaymentMethod(
-      method: (json['method'] ?? '').toString(),
-      detail: (json['detail'] ?? '').toString(),
-      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
-          DateTime.now(),
-    );
-  }
-}
+import '../../models/saved_payment_method.dart';
 
 class PaymentDetailsPage extends StatefulWidget {
   const PaymentDetailsPage({super.key});
@@ -81,7 +55,24 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
   @override
   void initState() {
     super.initState();
+    _debugListAllKeys();
     _loadSavedMethods();
+  }
+
+  Future<void> _debugListAllKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final keys = prefs.getKeys();
+      print('[PaymentDetailsPage] ===== SharedPreferences Keys =====');
+      print('[PaymentDetailsPage] Total keys: ${keys.length}');
+      for (final key in keys) {
+        print('[PaymentDetailsPage] Key: $key');
+      }
+      print('[PaymentDetailsPage] ==================================');
+    } catch (e) {
+      print('[PaymentDetailsPage] Error listing keys: $e');
+    }
   }
 
   @override
@@ -113,38 +104,138 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
   }
 
   Future<void> _loadSavedMethods() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_savedStorageKey);
-    if (raw == null || raw.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _savedMethods = [];
-        _loadingSaved = false;
-      });
-      return;
-    }
     try {
-      final list = (jsonDecode(raw) as List<dynamic>).cast<Map<String, dynamic>>();
-      final items = list.map(SavedPaymentMethod.fromJson).toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      
+      if (token.isEmpty) {
+        print('[PaymentDetailsPage] No auth token found');
+        if (!mounted) return;
+        setState(() {
+          _savedMethods = [];
+          _loadingSaved = false;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/payment-methods/'),
+        headers: {
+          'Authorization': 'Token $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print('[PaymentDetailsPage] Load response status: ${response.statusCode}');
+      print('[PaymentDetailsPage] Load response body: ${response.body}');
+
       if (!mounted) return;
-      setState(() {
-        _savedMethods = items;
-        _loadingSaved = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _savedMethods = [];
-        _loadingSaved = false;
-      });
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body) as Map<String, dynamic>;
+        final dataList = jsonData['data'] as List<dynamic>? ?? [];
+        
+        final items = dataList.map((item) {
+          return SavedPaymentMethod(
+            method: item['method'] ?? '',
+            detail: item['detail'] ?? '',
+            createdAt: DateTime.tryParse(item['created_at'] ?? '') ?? DateTime.now(),
+          );
+        }).toList();
+        
+        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        
+        print('[PaymentDetailsPage] Loaded ${items.length} payment methods from server');
+        
+        setState(() {
+          _savedMethods = items;
+          _loadingSaved = false;
+        });
+      } else {
+        print('[PaymentDetailsPage] Error loading: ${response.statusCode}');
+        setState(() {
+          _savedMethods = [];
+          _loadingSaved = false;
+        });
+      }
+    } catch (e) {
+      print('[PaymentDetailsPage] Error loading saved methods: $e');
+      if (mounted) {
+        setState(() {
+          _savedMethods = [];
+          _loadingSaved = false;
+        });
+      }
     }
   }
 
-  Future<void> _persistSavedMethods() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = jsonEncode(_savedMethods.map((e) => e.toJson()).toList());
-    await prefs.setString(_savedStorageKey, raw);
+  Future<void> _persistSavedMethods({
+    required String method,
+    required String detail,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      
+      if (token.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Authentication error. Please log in again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/payment-methods/'),
+        headers: {
+          'Authorization': 'Token $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'method': method,
+          'detail': detail,
+        }),
+      );
+
+      print('[PaymentDetailsPage] Save response status: ${response.statusCode}');
+      print('[PaymentDetailsPage] Save response body: ${response.body}');
+
+      if (!mounted) return;
+
+      if (response.statusCode == 201) {
+        // Reload the list from server
+        await _loadSavedMethods();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$method saved successfully'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        final errorData = jsonDecode(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${errorData['message'] ?? 'Failed to save payment method'}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('[PaymentDetailsPage] Error persisting methods: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving payment method: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showAddPaymentMethod() {
@@ -820,26 +911,14 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
     required String method,
     required String detail,
   }) async {
-    final item = SavedPaymentMethod(
-      method: method,
-      detail: detail,
-      createdAt: DateTime.now(),
-    );
-    setState(() {
-      _savedMethods = [item, ..._savedMethods];
-    });
-    await _persistSavedMethods();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$method saved successfully'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    // Save to backend
+    await _persistSavedMethods(method: method, detail: detail);
     Navigator.pop(context);
-    setState(() {
-      _clearFields();
-    });
+    if (mounted) {
+      setState(() {
+        _clearFields();
+      });
+    }
   }
 
   String _formatSavedDate(DateTime dt) {
@@ -877,12 +956,28 @@ class _PaymentDetailsPageState extends State<PaymentDetailsPage> {
                   top: 16,
                   right: 16,
                   child: SafeArea(
-                    child: Text(
-                      'Payment Methods',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            color: scheme.onPrimary,
-                            fontWeight: FontWeight.bold,
-                          ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.refresh, color: scheme.onPrimary),
+                          tooltip: 'Refresh',
+                          onPressed: () {
+                            setState(() {
+                              _loadingSaved = true;
+                            });
+                            _loadSavedMethods();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Payment Methods',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                color: scheme.onPrimary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

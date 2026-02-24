@@ -13,6 +13,19 @@ import '../bills_page.dart';
 import '../notifications.dart';
 import '../users/chat_page.dart';
 import 'utility_reviews_page.dart';
+import '../../services/notifications_service.dart';
+
+// Helper to convert provider name to utility type
+String? _utilityTypeForProvider(String provider) {
+  final p = provider.toLowerCase();
+  if (p == 'kseb') return 'Electricity';
+  if (p == 'water' || p == 'kwa') return 'Water';
+  if (p == 'gas') return 'Gas';
+  if (p == 'wifi') return 'WiFi';
+  if (p == 'dth') return 'DTH';
+  if (p == 'others' || p == 'other') return 'Others';
+  return null;
+}
 
 class UtilityDashboard extends StatefulWidget {
   const UtilityDashboard({super.key});
@@ -32,11 +45,16 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
   List<Map<String, dynamic>> _providerBills = [];
   bool _loadingProviderBills = false;
   bool _refreshing = false;
+  int _unreadNotificationCount = 0;
+  int _unreadChatCount = 0;
+  final _notificationsService = NotificationsService();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadUnreadCount();
+    _loadUnreadChats();
   }
 
   Future<void> _loadUserData() async {
@@ -101,10 +119,49 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
       await Future.wait([
         _fetchProviderUserCount(_providerName),
         _fetchProviderBills(_providerName),
+        _loadUnreadCount(),
       ]);
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final count = await _notificationsService.unreadCount(_username);
+      if (mounted) {
+        setState(() {
+          _unreadNotificationCount = count;
+        });
+      }
+    } catch (e) {
+      // Silently handle errors
+    }
+  }
+
+  Future<void> _loadUnreadChats() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final username = prefs.getString('user_username') ?? '';
+      final role = (prefs.getString('user_role') ?? 'user').toLowerCase();
+      if (username.isEmpty) return;
+      
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/chat/unread-counts/?username=${Uri.encodeQueryComponent(username)}&role=${Uri.encodeQueryComponent(role)}',
+      );
+      final resp = await http.get(uri, headers: {'Content-Type': 'application/json'});
+      
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final unreadList = (data['unread_counts'] as List<dynamic>?) ?? [];
+        int totalUnread = 0;
+        for (final item in unreadList) {
+          final count = ((item as Map<String, dynamic>)['unread_count'] ?? 0) as int;
+          totalUnread += count;
+        }
+        if (mounted) setState(() => _unreadChatCount = totalUnread);
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchProviderUserCount(String provider) async {
@@ -187,14 +244,20 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
   Future<void> _handleLogout() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // Reload to get latest data from persistent storage
+      await prefs.reload();
       final reviews = prefs.getString('saved_reviews_v1');
       final notifications = prefs.getString('notifications_list_v1');
+      final paymentMethods = prefs.getString('saved_payment_methods_v1');
       await prefs.clear();
       if (reviews != null && reviews.isNotEmpty) {
         await prefs.setString('saved_reviews_v1', reviews);
       }
       if (notifications != null && notifications.isNotEmpty) {
         await prefs.setString('notifications_list_v1', notifications);
+      }
+      if (paymentMethods != null && paymentMethods.isNotEmpty) {
+        await prefs.setString('saved_payment_methods_v1', paymentMethods);
       }
     } catch (_) {}
     if (!mounted) return;
@@ -204,17 +267,6 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    String? utilityTypeForProvider(String provider) {
-      final p = provider.toLowerCase();
-      if (p == 'kseb') return 'Electricity';
-      if (p == 'water' || p == 'kwa') return 'Water';
-      if (p == 'gas') return 'Gas';
-      if (p == 'wifi') return 'WiFi';
-      if (p == 'dth') return 'DTH';
-      if (p == 'others' || p == 'other') return 'Others';
-      return null;
-    }
-
     final pages = <Widget>[
       _HomeSection(
         onReadyLogout: _handleLogout,
@@ -228,10 +280,12 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
         billsLoadingGetter: () => _loadingProviderBills,
         onRefresh: _refreshAll,
         refreshingGetter: () => _refreshing,
+        unreadNotificationCountGetter: () => _unreadNotificationCount,
+        loadUnreadCount: _loadUnreadCount,
       ),
       const GenerateBillPage(),
       AdminPaymentReportsPage(
-        restrictedUtilityType: utilityTypeForProvider(_providerName),
+        restrictedUtilityType: _utilityTypeForProvider(_providerName),
         restrictedProviderName: _providerName,
       ),
       ChatPage(
@@ -246,7 +300,37 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
       const Icon(Icons.home, size: 28, color: Colors.white),
       const Icon(Icons.receipt_long, size: 28, color: Colors.white),
       const Icon(Icons.payment, size: 28, color: Colors.white),
-      const Icon(Icons.chat_bubble_outline, size: 28, color: Colors.white),
+      Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.chat_bubble_outline, size: 28, color: Colors.white),
+          if (_unreadChatCount > 0)
+            Positioned(
+              right: -8,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 18,
+                  minHeight: 18,
+                ),
+                child: Text(
+                  _unreadChatCount > 9 ? '9+' : '$_unreadChatCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
     ];
 
     return PopScope(
@@ -356,15 +440,22 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.notifications_none),
+                  leading: Badge(
+                    isLabelVisible: _unreadNotificationCount > 0,
+                    label: Text('$_unreadNotificationCount'),
+                    child: const Icon(Icons.notifications_none),
+                  ),
                   title: const Text('Notifications'),
-                  onTap: () {
+                  onTap: () async {
                     Navigator.of(context).pop();
-                    Navigator.of(context).push(
+                    final utilityType = _utilityTypeForProvider(_providerName);
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => NotificationsPage(utilityType: _providerName),
+                        builder: (_) => NotificationsPage(utilityType: utilityType),
                       ),
                     );
+                    // Reload count after viewing notifications
+                    _loadUnreadCount();
                   },
                 ),
                 const Divider(),
@@ -387,7 +478,13 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                   ))
               .toList(),
           index: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
+          onTap: (i) {
+            setState(() => _currentIndex = i);
+            // Reload unread chat count when navigating away from chat page
+            if (_currentIndex == 3 && i != 3) {
+              _loadUnreadChats();
+            }
+          },
           color: Theme.of(context).colorScheme.primary,
           buttonBackgroundColor:
               Theme.of(context).colorScheme.primaryContainer,
@@ -413,6 +510,8 @@ class _HomeSection extends StatelessWidget {
   final bool Function() billsLoadingGetter;
   final Future<void> Function() onRefresh;
   final bool Function() refreshingGetter;
+  final int Function() unreadNotificationCountGetter;
+  final VoidCallback loadUnreadCount;
 
   const _HomeSection({
     super.key,
@@ -426,6 +525,8 @@ class _HomeSection extends StatelessWidget {
     required this.billsGetter,
     required this.billsLoadingGetter,
     required this.onRefresh,
+    required this.unreadNotificationCountGetter,
+    required this.loadUnreadCount,
     required this.refreshingGetter,
   });
 
@@ -451,12 +552,19 @@ class _HomeSection extends StatelessWidget {
       actions: [
         IconButton(
           tooltip: 'Notifications',
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => NotificationsPage(utilityType: providerName)),
+          onPressed: () async {
+            final utilityType = _utilityTypeForProvider(providerName);
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => NotificationsPage(utilityType: utilityType)),
             );
+            // Reload count after viewing notifications
+            loadUnreadCount();
           },
-          icon: const Icon(Icons.notifications_none, color: Colors.white),
+          icon: Badge(
+            isLabelVisible: unreadNotificationCountGetter() > 0,
+            label: Text('${unreadNotificationCountGetter()}'),
+            child: const Icon(Icons.notifications_none, color: Colors.white),
+          ),
         ),
         IconButton(
           tooltip: 'Profile',
@@ -549,12 +657,40 @@ class _HomeSection extends StatelessWidget {
                   label: 'Notify',
                   color: const Color(0xFF95A0FF),
                   icon: Icons.notifications_none,
-                  onTap: () {
-                    Navigator.of(context).push(
+                  badgeCount: unreadNotificationCountGetter(),
+                  onTap: () async {
+                    String? utilityType;
+                    switch (providerName.toLowerCase()) {
+                      case 'kseb':
+                        utilityType = 'Electricity';
+                        break;
+                      case 'water':
+                      case 'kwa':
+                        utilityType = 'Water';
+                        break;
+                      case 'gas':
+                        utilityType = 'Gas';
+                        break;
+                      case 'wifi':
+                        utilityType = 'WiFi';
+                        break;
+                      case 'dth':
+                        utilityType = 'DTH';
+                        break;
+                      case 'others':
+                      case 'other':
+                        utilityType = 'Others';
+                        break;
+                      default:
+                        utilityType = null;
+                    }
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => NotificationsPage(utilityType: providerName),
+                        builder: (_) => NotificationsPage(utilityType: utilityType),
                       ),
                     );
+                    // Reload count after viewing notifications
+                    loadUnreadCount();
                   },
                 ),
                 _RoundAction(
@@ -588,6 +724,7 @@ class _RoundAction extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final String? badge;
+  final int? badgeCount;
 
   const _RoundAction({
     super.key,
@@ -596,10 +733,15 @@ class _RoundAction extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.badge,
+    this.badgeCount,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Use badgeCount if provided, otherwise use badge string
+    final showBadge = (badgeCount != null && badgeCount! > 0) || (badge != null && badge!.isNotEmpty);
+    final badgeText = badgeCount != null ? '$badgeCount' : (badge ?? '');
+    
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -625,7 +767,7 @@ class _RoundAction extends StatelessWidget {
                 child: Icon(icon, color: Colors.white, size: 28),
               ),
             ),
-            if (badge != null)
+            if (showBadge)
               Positioned(
                 right: 0,
                 top: 0,
@@ -639,7 +781,7 @@ class _RoundAction extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    badge!,
+                    badgeText,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,

@@ -264,218 +264,219 @@ class _AdminUsersListPageState extends State<AdminUsersListPage> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetchUsers,
-          child: CurvedHeaderPage(
-            title: 'Users',
-            headerHeight: 180,
-            titleAlignment: HeaderTitleAlignment.left,
-            bottomLeft: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _searchOpen
-                  ? Container(
-                      key: const ValueKey('open'),
-                      width: MediaQuery.of(context).size.width * 0.8,
-                      constraints: const BoxConstraints(maxWidth: 520),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.search, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _searchController,
-                              onChanged: _updateSearch,
-                              decoration: const InputDecoration(
-                                hintText: 'Search by name, username, or email',
-                                border: InputBorder.none,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: _searchOpen
+                      ? Container(
+                          key: const ValueKey('open'),
+                          width: MediaQuery.of(context).size.width,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 8,
                               ),
-                            ),
+                            ],
                           ),
-                          IconButton(
-                            tooltip: 'Clear',
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              _updateSearch('');
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'Close',
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              setState(() {
-                                _searchOpen = false;
-                                _searchController.clear();
-                                _searchQuery = '';
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    )
-                  : OutlinedButton.icon(
-                      key: const ValueKey('closed'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white70),
-                      ),
-                      onPressed: () => setState(() => _searchOpen = true),
-                      icon: const Icon(Icons.search),
-                      label: const Text('Search Users'),
-                    ),
-            ),
-            child: Builder(
-              builder: (context) {
-                if (_loading) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                return ListView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  itemCount: displayUsers.length,
-                  itemBuilder: (context, index) {
-                    final user = displayUsers[index];
-                    return Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.person_outline,
-                                  color: Theme.of(context).colorScheme.secondary,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    user['name']?.toString() ?? 'User',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.search, color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchController,
+                                  onChanged: _updateSearch,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Search by name, username, or email',
+                                    border: InputBorder.none,
                                   ),
                                 ),
+                              ),
+                              IconButton(
+                                tooltip: 'Clear',
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _updateSearch('');
+                                },
+                              ),
+                              IconButton(
+                                tooltip: 'Close',
+                                icon: const Icon(Icons.close),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchOpen = false;
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        )
+                      : OutlinedButton.icon(
+                          key: const ValueKey('closed'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Theme.of(context).colorScheme.primary,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          onPressed: () => setState(() => _searchOpen = true),
+                          icon: const Icon(Icons.search),
+                          label: const Text('Search Users'),
+                        ),
+                ),
+              ),
+              Expanded(
+                child: Builder(
+                  builder: (context) {
+                    if (_loading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      itemCount: displayUsers.length,
+                      itemBuilder: (context, index) {
+                        final user = displayUsers[index];
+                        final name = user['name']?.toString() ?? 'User';
+                        final initials = name.isNotEmpty
+                            ? name.split(' ').map((e) => e[0]).join()
+                            : 'U';
+                        final colors = [
+                          const Color(0xFF9C7DFF),
+                          const Color(0xFF5DADE2),
+                          const Color(0xFF52D4A4),
+                          const Color(0xFFFFA500),
+                          const Color(0xFFFF6B9D),
+                        ];
+                        final avatarColor = colors[index % colors.length];
+                        
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.08),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Row(
                                   children: [
-                                    Switch(
-                                      value:
-                                          (user['is_active'] ?? true) == true,
-                                      onChanged: (val) => _setActive(user, val),
+                                    Container(
+                                      width: 52,
+                                      height: 52,
+                                      decoration: BoxDecoration(
+                                        color: avatarColor,
+                                        borderRadius: BorderRadius.circular(26),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          initials.toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      user['username']?.toString() ?? '',
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 12,
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF2D3142),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            user['email']?.toString() ?? '',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Switch(
+                                          activeColor: const Color(0xFF2D3142),
+                                          value: (user['is_active'] ?? true) == true,
+                                          onChanged: (val) => _setActive(user, val),
+                                        ),
+                                        Text(
+                                          user['username']?.toString() ?? '',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton.icon(
+                                      onPressed: () => _editUser(user),
+                                      icon: const Icon(Icons.edit_outlined, size: 18),
+                                      label: const Text('Edit'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton.icon(
+                                      onPressed: () => _deleteUser(user),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 18,
+                                        color: Colors.redAccent,
+                                      ),
+                                      label: const Text(
+                                        'Delete',
+                                        style: TextStyle(color: Colors.redAccent),
                                       ),
                                     ),
                                   ],
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.email_outlined,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    user['email']?.toString() ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.phone_outlined,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  user['phone']?.toString() ?? '',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(
-                                  Icons.location_on_outlined,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    user['address']?.toString() ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton.icon(
-                                  onPressed: () => _editUser(user),
-                                  icon: const Icon(Icons.edit_outlined),
-                                  label: const Text('Edit'),
-                                ),
-                                const SizedBox(width: 8),
-                                TextButton.icon(
-                                  onPressed: () => _deleteUser(user),
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    color: Colors.redAccent,
-                                  ),
-                                  label: const Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.redAccent),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

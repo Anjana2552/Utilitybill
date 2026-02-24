@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import '../../config/api_config.dart';
 
 class AdminReviewsPage extends StatefulWidget {
   const AdminReviewsPage({super.key});
@@ -10,7 +11,6 @@ class AdminReviewsPage extends StatefulWidget {
 }
 
 class _AdminReviewsPageState extends State<AdminReviewsPage> {
-  static const _reviewsStorageKey = 'saved_reviews_v1';
   List<Map<String, dynamic>> _reviews = [];
   bool _loading = true;
 
@@ -21,29 +21,48 @@ class _AdminReviewsPageState extends State<AdminReviewsPage> {
   }
 
   Future<void> _loadReviews() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_reviewsStorageKey);
-    if (raw == null || raw.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _reviews = [];
-        _loading = false;
-      });
-      return;
-    }
+    setState(() => _loading = true);
+    
     try {
-      final list = (jsonDecode(raw) as List<dynamic>).cast<Map<String, dynamic>>();
-      list.sort((a, b) {
-        final aDt = DateTime.tryParse((a['createdAt'] ?? '').toString()) ?? DateTime(1970);
-        final bDt = DateTime.tryParse((b['createdAt'] ?? '').toString()) ?? DateTime(1970);
-        return bDt.compareTo(aDt);
-      });
-      if (!mounted) return;
-      setState(() {
-        _reviews = list;
-        _loading = false;
-      });
-    } catch (_) {
+      // Load all reviews from database via API
+      final uri = Uri.parse('${ApiConfig.baseUrl}/reviews/list/');
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json'});
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final reviewsList = (data['reviews'] as List<dynamic>?) ?? [];
+        
+        final List<Map<String, dynamic>> reviews = reviewsList.map((item) {
+          final reviewData = item as Map<String, dynamic>;
+          return {
+            'utilityType': (reviewData['utility_type'] ?? '').toString(),
+            'rating': (reviewData['rating'] ?? 0) as int,
+            'message': (reviewData['message'] ?? '').toString(),
+            'createdAt': (reviewData['created_at'] ?? '').toString(),
+            'username': (reviewData['username'] ?? '').toString(),
+          };
+        }).toList();
+        
+        reviews.sort((a, b) {
+          final aDt = DateTime.tryParse((a['createdAt'] ?? '').toString()) ?? DateTime(1970);
+          final bDt = DateTime.tryParse((b['createdAt'] ?? '').toString()) ?? DateTime(1970);
+          return bDt.compareTo(aDt);
+        });
+        
+        if (!mounted) return;
+        setState(() {
+          _reviews = reviews;
+          _loading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _reviews = [];
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading reviews: $e');
       if (!mounted) return;
       setState(() {
         _reviews = [];

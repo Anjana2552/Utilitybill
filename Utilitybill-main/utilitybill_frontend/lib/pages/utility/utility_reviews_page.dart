@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import '../../config/api_config.dart';
 import '../../widgets/theme_header.dart';
 
 class UtilityReviewsPage extends StatefulWidget {
@@ -12,7 +13,6 @@ class UtilityReviewsPage extends StatefulWidget {
 }
 
 class _UtilityReviewsPageState extends State<UtilityReviewsPage> {
-  static const _reviewsStorageKey = 'saved_reviews_v1';
   List<Map<String, dynamic>> _reviews = [];
   bool _loading = true;
 
@@ -23,34 +23,57 @@ class _UtilityReviewsPageState extends State<UtilityReviewsPage> {
   }
 
   Future<void> _loadReviews() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_reviewsStorageKey);
+    setState(() => _loading = true);
     final utilityType = _utilityTypeForProvider(widget.providerName);
-    if (raw == null || raw.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _reviews = [];
-        _loading = false;
-      });
-      return;
-    }
+    
     try {
-      final list = (jsonDecode(raw) as List<dynamic>).cast<Map<String, dynamic>>();
-      final filtered = list.where((item) {
-        final type = (item['utilityType'] ?? '').toString().toLowerCase();
-        return utilityType == null || type == utilityType.toLowerCase();
-      }).toList();
-      filtered.sort((a, b) {
-        final aDt = DateTime.tryParse((a['createdAt'] ?? '').toString()) ?? DateTime(1970);
-        final bDt = DateTime.tryParse((b['createdAt'] ?? '').toString()) ?? DateTime(1970);
-        return bDt.compareTo(aDt);
-      });
-      if (!mounted) return;
-      setState(() {
-        _reviews = filtered;
-        _loading = false;
-      });
-    } catch (_) {
+      // Load from database via API
+      final queryParams = <String, String>{};
+      if (widget.providerName.isNotEmpty) {
+        queryParams['provider_name'] = widget.providerName;
+      }
+      if (utilityType != null) {
+        queryParams['utility_type'] = utilityType;
+      }
+      
+      final uri = Uri.parse('${ApiConfig.baseUrl}/reviews/list/').replace(queryParameters: queryParams);
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json'});
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final reviewsList = (data['reviews'] as List<dynamic>?) ?? [];
+        
+        final List<Map<String, dynamic>> reviews = reviewsList.map((item) {
+          final reviewData = item as Map<String, dynamic>;
+          return {
+            'utilityType': (reviewData['utility_type'] ?? '').toString(),
+            'rating': (reviewData['rating'] ?? 0) as int,
+            'message': (reviewData['message'] ?? '').toString(),
+            'createdAt': (reviewData['created_at'] ?? '').toString(),
+            'username': (reviewData['username'] ?? '').toString(),
+          };
+        }).toList();
+        
+        reviews.sort((a, b) {
+          final aDt = DateTime.tryParse((a['createdAt'] ?? '').toString()) ?? DateTime(1970);
+          final bDt = DateTime.tryParse((b['createdAt'] ?? '').toString()) ?? DateTime(1970);
+          return bDt.compareTo(aDt);
+        });
+        
+        if (!mounted) return;
+        setState(() {
+          _reviews = reviews;
+          _loading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _reviews = [];
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading reviews: $e');
       if (!mounted) return;
       setState(() {
         _reviews = [];

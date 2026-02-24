@@ -40,6 +40,7 @@ dependencies:
   pdf: ^3.10.8
   printing: ^5.12.0
   image_picker: ^1.0.7
+  fl_chart: ^0.69.0
 
 dev_dependencies:
   flutter_test:
@@ -64,9 +65,9 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
-    # - assets/register.png
-    # - assets/login.png
+  assets:
+    - assets/images/landing_bg.png
+    - assets/images/landing_bg_mobile.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

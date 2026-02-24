@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import '../../config/api_config.dart';
 import '../../widgets/theme_header.dart';
 
 class SavedReview {
@@ -86,75 +88,113 @@ class _ReviewPageState extends State<ReviewPage> {
     final prefs = await SharedPreferences.getInstance();
     final currentUsername = prefs.getString('user_username') ?? '';
 
-    final review = SavedReview(
-      utilityType: _selectedUtility ?? 'Other',
-      rating: _rating,
-      message: _messageController.text.trim(),
-      createdAt: DateTime.now(),
-      username: currentUsername,
-    );
-    
-    // Load all reviews
-    final raw = prefs.getString(_reviewsStorageKey);
-    List<SavedReview> allReviews = [];
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final list = (jsonDecode(raw) as List<dynamic>).cast<Map<String, dynamic>>();
-        allReviews = list.map(SavedReview.fromJson).toList();
-      } catch (_) {}
+    // Determine provider name based on utility type
+    String providerName = _getProviderName(_selectedUtility ?? 'Others');
+
+    try {
+      // Save to database via API
+      final uri = Uri.parse('${ApiConfig.baseUrl}/reviews/add/');
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'provider_name': providerName,
+          'utility_type': _selectedUtility ?? 'Others',
+          'rating': _rating,
+          'message': _messageController.text.trim(),
+          'username': currentUsername,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        // Successfully saved to database
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Thank you for your review!')),
+        );
+        _messageController.clear();
+        setState(() {
+          _rating = 0;
+          _selectedUtility = null;
+        });
+        // Reload reviews
+        _loadReviews();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to submit review. Please try again.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     }
-    
-    // Add new review to all reviews
-    allReviews = [review, ...allReviews];
-    
-    // Save all reviews
-    final encoded = jsonEncode(allReviews.map((e) => e.toJson()).toList());
-    await prefs.setString(_reviewsStorageKey, encoded);
-    
-    // Update displayed reviews (filtered by current user)
-    setState(() {
-      _reviews = [review, ..._reviews];
-    });
-    
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Thank you for your review!')),
-    );
-    _messageController.clear();
-    setState(() {
-      _rating = 0;
-      _selectedUtility = null;
-    });
+  }
+
+  String _getProviderName(String utilityType) {
+    switch (utilityType.toLowerCase()) {
+      case 'electricity':
+        return 'kseb';
+      case 'water':
+        return 'water';
+      case 'gas':
+        return 'gas';
+      case 'wifi':
+        return 'wifi';
+      case 'dth':
+        return 'dth';
+      default:
+        return 'others';
+    }
   }
 
   Future<void> _loadReviews() async {
+    setState(() => _loadingReviews = true);
     final prefs = await SharedPreferences.getInstance();
     final currentUsername = prefs.getString('user_username') ?? '';
-    final raw = prefs.getString(_reviewsStorageKey);
-    if (raw == null || raw.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _reviews = [];
-        _loadingReviews = false;
-      });
-      return;
-    }
+    
     try {
-      final list = (jsonDecode(raw) as List<dynamic>).cast<Map<String, dynamic>>();
-      final allReviews = list.map(SavedReview.fromJson).toList();
+      // Load from database via API
+      final uri = Uri.parse('${ApiConfig.baseUrl}/reviews/list/');
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json'});
       
-      // Filter reviews to show only current user's reviews
-      final userReviews = allReviews
-          .where((review) => review.username == currentUsername)
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      
-      if (!mounted) return;
-      setState(() {
-        _reviews = userReviews;
-        _loadingReviews = false;
-      });
-    } catch (_) {
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final reviewsList = (data['reviews'] as List<dynamic>?) ?? [];
+        
+        final List<SavedReview> allReviews = reviewsList.map((item) {
+          final reviewData = item as Map<String, dynamic>;
+          return SavedReview(
+            utilityType: (reviewData['utility_type'] ?? '').toString(),
+            rating: (reviewData['rating'] ?? 0) as int,
+            message: (reviewData['message'] ?? '').toString(),
+            createdAt: DateTime.tryParse((reviewData['created_at'] ?? '').toString()) ?? DateTime.now(),
+            username: (reviewData['username'] ?? '').toString(),
+          );
+        }).toList();
+        
+        // Filter reviews to show only current user's reviews
+        final userReviews = allReviews
+            .where((review) => review.username == currentUsername)
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        
+        if (!mounted) return;
+        setState(() {
+          _reviews = userReviews;
+          _loadingReviews = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _reviews = [];
+          _loadingReviews = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading reviews: $e');
       if (!mounted) return;
       setState(() {
         _reviews = [];
