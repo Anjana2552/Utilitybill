@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/theme_header.dart';
+import '../users/privacy_center_page.dart';
+import '../users/terms_disclaimer_page.dart';
+import '../users/about_us_page.dart';
 
 class UtilityProfilePage extends StatefulWidget {
   const UtilityProfilePage({super.key});
@@ -27,6 +30,41 @@ class _UtilityProfilePageState extends State<UtilityProfilePage> {
       _email = prefs.getString('user_email') ?? '';
       _loading = false;
     });
+  }
+
+  Future<void> _handleLogout() async {
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      // Clear all saved preferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      if (!mounted) return;
+      
+      // Navigate to login page
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    }
   }
 
   @override
@@ -91,34 +129,68 @@ class _UtilityProfilePageState extends State<UtilityProfilePage> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Account Settings',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
+        const SizedBox(height: 16),
           Card(
             elevation: 1,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Column(
+            child: Column(
               children: [
                 ListTile(
-                  leading: Icon(Icons.lock_outline),
-                  title: Text('Change Password'),
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('Privacy Center'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PrivacyCenterPage()),
+                    );
+                  },
                 ),
-                Divider(height: 1),
+                const Divider(height: 1),
                 ListTile(
-                  leading: Icon(Icons.notifications_none),
-                  title: Text('Notifications'),
+                  leading: const Icon(Icons.description_outlined),
+                  title: const Text('Terms & Disclaimer'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const TermsDisclaimerPage()),
+                    );
+                  },
                 ),
-                Divider(height: 1),
+                const Divider(height: 1),
                 ListTile(
-                  leading: Icon(Icons.privacy_tip_outlined),
-                  title: Text('Privacy'),
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('About Us'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AboutUsPage()),
+                    );
+                  },
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Logout Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _handleLogout,
+              icon: const Icon(Icons.logout),
+              label: const Text('Logout'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
             ),
           ),
         ],

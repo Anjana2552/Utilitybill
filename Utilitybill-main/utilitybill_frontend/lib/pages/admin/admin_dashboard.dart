@@ -13,6 +13,7 @@ import '../bills_page.dart';
 import '../payment_reports_page.dart';
 import 'admin_payment_request_page.dart';
 import 'admin_reviews_page.dart';
+import 'admin_complaints_page.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -232,6 +233,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const AdminReviewsPage(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.report_problem,
+                    color: Colors.white,
+                  ),
+                  title: const Text(
+                    'Complaints',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminComplaintsPage(),
                       ),
                     );
                   },

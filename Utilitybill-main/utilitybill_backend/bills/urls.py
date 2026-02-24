@@ -51,6 +51,14 @@ urlpatterns = [
     path('reviews/add/', views.add_review, name='add-review'),
     path('reviews/list/', views.list_reviews, name='list-reviews'),
     path('reviews/stats/', views.review_stats, name='review-stats'),
+    # Complaint endpoints
+    path('complaints/add/', views.add_complaint, name='add-complaint'),
+    path('complaints/list/', views.list_complaints, name='list-complaints'),
+    path('complaints/update/<int:pk>/', views.update_complaint, name='update-complaint'),
+    # Budget/Monthly limit endpoint
+    path('budget/check-monthly-limit/', views.check_monthly_limit, name='check-monthly-limit'),
+    # Alert broadcast endpoint
+    path('alerts/send-broadcast/', views.send_broadcast_alert, name='send-broadcast-alert'),
     # Admin user management
     path('admin/set-user-active/', views.set_user_active, name='set-user-active'),
     path('admin/delete-user/', views.delete_user_account, name='delete-user'),

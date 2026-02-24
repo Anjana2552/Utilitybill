@@ -9,11 +9,11 @@ from django.utils import timezone
 from django.db.models import Count
 import random
 import string
-from .models import UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment, ChatMessage, Wallet, WalletTransaction, PaymentMethod, Notification, Review
+from .models import UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment, ChatMessage, Wallet, WalletTransaction, PaymentMethod, Notification, Review, Complaint
 from decimal import Decimal, InvalidOperation
 from .serializers import (
     UserSerializer, UserProfileSerializer, 
-    UserRegistrationSerializer, UserUtilitySerializer, GeneratedBillSerializer, UtilityBillSerializer, ChatMessageSerializer, PaymentMethodSerializer, NotificationSerializer, ReviewSerializer
+    UserRegistrationSerializer, UserUtilitySerializer, GeneratedBillSerializer, UtilityBillSerializer, ChatMessageSerializer, PaymentMethodSerializer, NotificationSerializer, ReviewSerializer, ComplaintSerializer
 )
 from rest_framework.authtoken.models import Token
 
@@ -2036,4 +2036,304 @@ def review_stats(request):
         print(f"[REVIEW STATS ERROR] {e}")
         return Response({
             'error': f'Failed to fetch stats: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ==================== COMPLAINT ENDPOINTS ====================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def add_complaint(request):
+    """Add a new complaint (unauthenticated endpoint for mobile app)"""
+    try:
+        username = (request.data.get('username') or '').strip()
+        category = (request.data.get('category') or '').strip()
+        subject = (request.data.get('subject') or '').strip()
+        description = (request.data.get('description') or '').strip()
+        
+        # Validate required fields
+        if not all([username, category, subject, description]):
+            return Response({
+                'error': 'username, category, subject, and description are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create complaint
+        complaint = Complaint.objects.create(
+            username=username,
+            category=category,
+            subject=subject,
+            description=description,
+            status='pending'
+        )
+        
+        serializer = ComplaintSerializer(complaint)
+        return Response({
+            'success': True,
+            'message': 'Complaint submitted successfully',
+            'complaint': serializer.data
+        }, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        print(f"[COMPLAINT ERROR] {e}")
+        return Response({
+            'error': f'Failed to create complaint: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def list_complaints(request):
+    """List complaints by username or all (for admins)"""
+    try:
+        username = (request.query_params.get('username') or '').strip()
+        
+        # Build query
+        query = Complaint.objects.all()
+        
+        if username:
+            query = query.filter(username=username)
+        
+        # Order by created_at descending
+        query = query.order_by('-created_at')
+        
+        serializer = ComplaintSerializer(query, many=True)
+        return Response({
+            'success': True,
+            'count': query.count(),
+            'complaints': serializer.data
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"[COMPLAINT LIST ERROR] {e}")
+        return Response({
+            'error': f'Failed to fetch complaints: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def update_complaint(request, pk):
+    """Update complaint status and response (admin endpoint)"""
+    try:
+        complaint = Complaint.objects.get(pk=pk)
+        
+        # Update fields if provided
+        if 'status' in request.data:
+            complaint.status = request.data['status']
+        
+        if 'response' in request.data:
+            complaint.response = request.data['response']
+        
+        complaint.save()
+        
+        serializer = ComplaintSerializer(complaint)
+        return Response({
+            'success': True,
+            'message': 'Complaint updated successfully',
+            'complaint': serializer.data
+        }, status=status.HTTP_200_OK)
+    
+    except Complaint.DoesNotExist:
+        return Response({
+            'error': 'Complaint not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    except Exception as e:
+        print(f"[COMPLAINT UPDATE ERROR] {e}")
+        return Response({
+            'error': f'Failed to update complaint: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def check_monthly_limit(request):
+    """Check if user's monthly spending exceeds or is under their set limit and create notifications"""
+    try:
+        username = request.data.get('username')
+        monthly_limit = float(request.data.get('monthly_limit', 0))
+        current_month_spending = float(request.data.get('current_month_spending', 0))
+        
+        if not username:
+            return Response({
+                'error': 'Username is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get user
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({
+                'error': 'User not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Only create notifications if monthly limit is set
+        if monthly_limit <= 0:
+            return Response({
+                'success': True,
+                'message': 'No monthly limit set'
+            }, status=status.HTTP_200_OK)
+        
+        # Check existing notifications to avoid duplicates
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        recent_notifications = Notification.objects.filter(
+            user=user,
+            notification_type='budget_alert',
+            created_at__date=today
+        )
+        
+        # If already notified today, don't create duplicate
+        if recent_notifications.exists():
+            return Response({
+                'success': True,
+                'message': 'Already notified today'
+            }, status=status.HTTP_200_OK)
+        
+        # Check if spending exceeds limit
+        if current_month_spending > monthly_limit:
+            over_amount = current_month_spending - monthly_limit
+            percentage = (current_month_spending / monthly_limit * 100) if monthly_limit > 0 else 0
+            
+            _create_notification(
+                user=user,
+                notification_type='budget_exceeded',
+                title='Monthly Budget Exceeded',
+                message=f'Your monthly utility spending of Rs.{current_month_spending:.2f} has exceeded your budget limit of Rs.{monthly_limit:.2f} by Rs.{over_amount:.2f} ({percentage:.0f}% of budget).',
+                utility_type='budget'
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Budget exceeded notification created',
+                'status': 'exceeded',
+                'over_amount': over_amount
+            }, status=status.HTTP_200_OK)
+        
+        # Check if spending is under limit (within budget)
+        elif current_month_spending > 0:
+            remaining = monthly_limit - current_month_spending
+            percentage = (current_month_spending / monthly_limit * 100) if monthly_limit > 0 else 0
+            
+            # Only notify if spending is significant (>50% of limit) but still within budget
+            if percentage > 50 and percentage <= 80:
+                _create_notification(
+                    user=user,
+                    notification_type='budget_within',
+                    title='Within Monthly Budget',
+                    message=f'Great job! Your utility spending of Rs.{current_month_spending:.2f} is within your budget of Rs.{monthly_limit:.2f}. You have Rs.{remaining:.2f} remaining ({100-percentage:.0f}% of budget).',
+                    utility_type='budget'
+                )
+                
+                return Response({
+                    'success': True,
+                    'message': 'Within budget notification created',
+                    'status': 'within_budget',
+                    'remaining': remaining
+                }, status=status.HTTP_200_OK)
+            
+            # Notify if nearing limit (80-100%)
+            elif percentage > 80:
+                _create_notification(
+                    user=user,
+                    notification_type='budget_nearing',
+                    title='Nearing Budget Limit',
+                    message=f'You have used {percentage:.0f}% of your monthly budget (Rs.{current_month_spending:.2f} of Rs.{monthly_limit:.2f}). Only Rs.{remaining:.2f} remaining.',
+                    utility_type='budget'
+                )
+                
+                return Response({
+                    'success': True,
+                    'message': 'Nearing limit notification created',
+                    'status': 'nearing_limit',
+                    'remaining': remaining
+                }, status=status.HTTP_200_OK)
+        
+        return Response({
+            'success': True,
+            'message': 'No notification needed'
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"[MONTHLY LIMIT CHECK ERROR] {e}")
+        return Response({
+            'error': f'Failed to check monthly limit: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def send_broadcast_alert(request):
+    """Send alert notification to all users of a specific utility type"""
+    try:
+        utility_type = request.data.get('utility_type')
+        title = request.data.get('title')
+        message = request.data.get('message')
+        priority = request.data.get('priority', 'medium')
+        sender_username = request.data.get('sender_username', '')
+        
+        if not utility_type:
+            return Response({
+                'error': 'Utility type is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not title or not message:
+            return Response({
+                'error': 'Title and message are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get all users who have this utility type
+        user_utilities = UserUtility.objects.filter(
+            utility_type__iexact=utility_type
+        ).select_related('user').distinct()
+        
+        users_notified = 0
+        notification_type = 'alert'
+        
+        # Determine text prefix based on priority (no emojis due to MySQL charset limitations)
+        if priority == 'high':
+            title_prefix = 'URGENT: '
+            notification_type = 'urgent_alert'
+        elif priority == 'medium':
+            title_prefix = 'IMPORTANT: '
+        else:
+            title_prefix = 'INFO: '
+        
+        full_title = f"{title_prefix}{title}"
+        
+        # Create notifications for all users
+        created_notifications = []
+        for user_utility in user_utilities:
+            if user_utility.user:
+                notification = _create_notification(
+                    user=user_utility.user,
+                    notification_type=notification_type,
+                    title=full_title,
+                    message=message,
+                    utility_type=utility_type
+                )
+                
+                if notification:
+                    created_notifications.append(notification)
+                    users_notified += 1
+        
+        # Log the broadcast
+        print(f"[BROADCAST ALERT] Sent '{title}' to {users_notified} {utility_type} users by {sender_username}")
+        
+        return Response({
+            'success': True,
+            'message': f'Alert sent to {users_notified} users',
+            'users_notified': users_notified,
+            'notification_ids': [n.id for n in created_notifications]
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"[BROADCAST ALERT ERROR] {e}")
+        return Response({
+            'error': f'Failed to send broadcast alert: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)

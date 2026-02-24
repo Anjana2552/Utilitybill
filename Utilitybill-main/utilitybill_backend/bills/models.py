@@ -123,6 +123,8 @@ class UtilityBill(models.Model):
     previous_reading = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     current_reading = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    reading_date = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -324,3 +326,32 @@ class Review(models.Model):
     def __str__(self):
         user_str = self.user.username if self.user else 'Anonymous'
         return f"{user_str} - {self.utility_type} ({self.rating}★)"
+
+class Complaint(models.Model):
+    """User complaints and feedback"""
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+        ('closed', 'Closed'),
+    )
+    
+    username = models.CharField(max_length=150)
+    category = models.CharField(max_length=100)
+    subject = models.CharField(max_length=200)
+    description = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    response = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'complaint'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['username']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"{self.username}: {self.subject}"

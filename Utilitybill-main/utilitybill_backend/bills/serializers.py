@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
-    UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment, ChatMessage, Wallet, WalletTransaction, PaymentMethod, Notification, Review
+    UserProfile, UserUtility, GeneratedBill, UtilityBill, Payment, ChatMessage, Wallet, WalletTransaction, PaymentMethod, Notification, Review, Complaint
 )
 
 
@@ -79,13 +79,20 @@ class GeneratedBillSerializer(serializers.ModelSerializer):
 
 
 class UtilityBillSerializer(serializers.ModelSerializer):
+    bill_status = serializers.SerializerMethodField()
+    
     class Meta:
         model = UtilityBill
         fields = [
             'id', 'utility_type', 'bill_id', 'consumer_name', 'consumer_id',
-            'previous_reading', 'current_reading', 'total_amount', 'created_at'
+            'previous_reading', 'current_reading', 'total_amount', 'reading_date', 'due_date', 'created_at', 'bill_status'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'bill_status']
+    
+    def get_bill_status(self, obj):
+        """Determine bill status based on approved payments"""
+        has_approved_payment = obj.payments.filter(status='Approved').exists()
+        return 'paid' if has_approved_payment else 'unpaid'
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -143,4 +150,12 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = ['id', 'username', 'provider_name', 'utility_type', 'rating', 'message', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ComplaintSerializer(serializers.ModelSerializer):
+    """Serializer for Complaint model"""
+    class Meta:
+        model = Complaint
+        fields = ['id', 'username', 'category', 'subject', 'description', 'status', 'response', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']

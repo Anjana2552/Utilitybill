@@ -36,6 +36,9 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
   @override
   void initState() {
     super.initState();
+    print('📋 PaymentReportsPage initState');
+    print('   restrictedUtilityType: ${widget.restrictedUtilityType}');
+    print('   restrictedProviderName: ${widget.restrictedProviderName}');
     _statusFilter = widget.initialStatus;
     _loadRoleAndFetch();
   }
@@ -43,11 +46,19 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
   @override
   void didUpdateWidget(covariant AdminPaymentReportsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    print('🔄 PaymentReportsPage didUpdateWidget');
+    print('   OLD restrictedUtilityType: ${oldWidget.restrictedUtilityType}');
+    print('   NEW restrictedUtilityType: ${widget.restrictedUtilityType}');
+    print('   OLD restrictedProviderName: ${oldWidget.restrictedProviderName}');
+    print('   NEW restrictedProviderName: ${widget.restrictedProviderName}');
     // If the restricted utility type changes (e.g., after dashboard detects
     // the authority type), refetch with the new restriction.
     if (oldWidget.restrictedUtilityType != widget.restrictedUtilityType ||
         oldWidget.restrictedProviderName != widget.restrictedProviderName) {
+      print('   ✅ Props changed, refetching data...');
       _fetchData();
+    } else {
+      print('   ⏭️  Props unchanged, skipping refetch');
     }
   }
 
@@ -65,7 +76,7 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
   Future<void> _fetchData() async {
     setState(() => _loading = true);
     try {
-      // Fetch payments
+      // Fetch all payments first (don't filter by utility type at API level)
       final payUri = Uri.parse(
         '${ApiConfig.baseUrl}/payments/list/${_statusFilter != null ? '?status=${_statusFilter}' : ''}',
       );
@@ -80,20 +91,10 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
         _payments = results.cast<Map<String, dynamic>>();
       }
 
-      // Fetch utility bills for pending computation
+      // Fetch ALL utility bills (don't filter at API level, filter in code)
       final utilBase = Uri.parse('${ApiConfig.baseUrl}/utility-bill/list/');
-      final Map<String, String> q = {};
-      if (widget.restrictedUtilityType != null &&
-          widget.restrictedUtilityType!.isNotEmpty) {
-        q['utility_type'] = widget.restrictedUtilityType!;
-      }
-      if (widget.restrictedProviderName != null &&
-          widget.restrictedProviderName!.isNotEmpty) {
-        q['provider_name'] = widget.restrictedProviderName!;
-      }
-      final utilUri = q.isEmpty ? utilBase : utilBase.replace(queryParameters: q);
       final utilResp = await http.get(
-        utilUri,
+        utilBase,
         headers: {'Content-Type': 'application/json'},
       );
       if (utilResp.statusCode == 200) {
@@ -107,6 +108,11 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
       if (widget.restrictedUtilityType != null &&
           widget.restrictedUtilityType!.isNotEmpty) {
         final String restrict = widget.restrictedUtilityType!.toLowerCase();
+        print('🔍 Filtering by utility type: ${widget.restrictedUtilityType}');
+        print('📊 Total bills before filter: ${_utilityBills.length}');
+        print('💰 Total payments before filter: ${_payments.length}');
+        
+        // Filter bills by utility type (case-insensitive)
         _utilityBills = _utilityBills
             .where(
               (b) =>
@@ -114,15 +120,25 @@ class _AdminPaymentReportsPageState extends State<AdminPaymentReportsPage> {
                   restrict,
             )
             .toList();
+        
+        print('📊 Bills after filter: ${_utilityBills.length}');
+        
+        // Get allowed bill IDs from filtered bills
         final Set<String> allowedBillIds = _utilityBills
             .map((b) => (b['bill_id'] ?? '').toString())
             .where((id) => id.isNotEmpty)
             .toSet();
+        
+        print('🎯 Allowed bill IDs: $allowedBillIds');
+        
+        // Filter payments to only those for allowed bills
         _payments = _payments
             .where(
               (p) => allowedBillIds.contains((p['bill_id'] ?? '').toString()),
             )
             .toList();
+        
+        print('💰 Payments after filter: ${_payments.length}');
       }
 
       // Recompute totals after any filtering

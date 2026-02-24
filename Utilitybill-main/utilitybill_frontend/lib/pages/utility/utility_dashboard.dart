@@ -11,6 +11,7 @@ import '../../widgets/theme_header.dart';
 import 'utility_users_list.dart';
 import '../bills_page.dart';
 import '../notifications.dart';
+import 'send_alert_message_page.dart';
 import '../users/chat_page.dart';
 import 'utility_reviews_page.dart';
 import '../../services/notifications_service.dart';
@@ -267,6 +268,10 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    // Debug logging
+    print('🏢 Provider Name: $_providerName');
+    print('🔧 Utility Type: ${_utilityTypeForProvider(_providerName)}');
+    
     final pages = <Widget>[
       _HomeSection(
         onReadyLogout: _handleLogout,
@@ -456,6 +461,30 @@ class _UtilityDashboardState extends State<UtilityDashboard> {
                     );
                     // Reload count after viewing notifications
                     _loadUnreadCount();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.campaign),
+                  title: const Text('Send Alert Message'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    final utilityType = _utilityTypeForProvider(_providerName);
+                    if (utilityType != null) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SendAlertMessagePage(
+                            utilityType: utilityType,
+                          ),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Unable to determine utility type'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   },
                 ),
                 const Divider(),

@@ -13,6 +13,11 @@ import '../../config/api_config.dart';
 import '../notifications.dart';
 import '../../services/notifications_service.dart';
 import 'rewards_page.dart';
+import 'settings_page.dart';
+import 'complaint_page.dart';
+import 'utility_health_score_page.dart';
+import '../admin/admin_dashboard.dart';
+import '../utility/utility_dashboard.dart';
 // Theme toggling removed; single theme app
 
 class HomePage extends StatefulWidget {
@@ -25,6 +30,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   String _fullName = '';
+  String _userRole = 'user'; // user, admin, or utility
   Map<String, dynamic>? _latestBill; // latest bill for this user
   bool _loadingLatestBill = false;
   int _unreadNotifCount = 0;
@@ -40,6 +46,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadName();
+    _loadUserRole();
     _loadLatestBill();
     _loadUnreadNotifications();
     _loadUnreadChats();
@@ -97,6 +104,15 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     setState(() {
       _fullName = name;
+    });
+  }
+
+  Future<void> _loadUserRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    final role = (prefs.getString('user_role') ?? 'user').toLowerCase();
+    if (!mounted) return;
+    setState(() {
+      _userRole = role;
     });
   }
 
@@ -936,6 +952,18 @@ class _HomePageState extends State<HomePage> {
                     Navigator.pushNamed(context, '/user/bill_payment');
                   },
                 ),
+                _DrawerMenuItem(
+                  icon: Icons.analytics_outlined,
+                  title: 'Utility Health Score',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const UtilityHealthScorePage(),
+                      ),
+                    );
+                  },
+                ),
                 // PAYMENTS Section
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -1010,8 +1038,22 @@ class _HomePageState extends State<HomePage> {
                   title: 'Settings',
                   onTap: () {
                     Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Settings coming soon')),
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsPage(),
+                      ),
+                    );
+                  },
+                ),
+                _DrawerMenuItem(
+                  icon: Icons.report_problem_outlined,
+                  title: 'Complaints',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ComplaintPage(),
+                      ),
                     );
                   },
                 ),
@@ -1028,6 +1070,59 @@ class _HomePageState extends State<HomePage> {
                     await _loadUnreadNotifications();
                   },
                 ),
+                // Role-based navigation
+                if (_userRole == 'admin') ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Text(
+                      'ADMINISTRATION',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade600,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                  _DrawerMenuItem(
+                    icon: Icons.admin_panel_settings,
+                    title: 'Admin Dashboard',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (_) => const AdminDashboard(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                if (_userRole == 'utility') ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Text(
+                      'UTILITY MANAGEMENT',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade600,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                  _DrawerMenuItem(
+                    icon: Icons.dashboard,
+                    title: 'Utility Dashboard',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (_) => const UtilityDashboard(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   child: Material(
@@ -2377,7 +2472,14 @@ class _ProfileTab extends StatelessWidget {
             leading: Icon(Icons.settings_outlined, color: scheme.secondary),
             title: const Text('Settings'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => _soon(context, 'Settings'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsPage(),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 8),

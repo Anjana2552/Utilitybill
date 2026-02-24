@@ -484,6 +484,8 @@ class _GenerateBillPageState extends State<GenerateBillPage> {
             (_isElectricity || _isWater || _isGas || _isWifi || _isDth)
             ? payload['total_amount']
             : payload['total_amount'],
+        'reading_date': payload['reading_date'],
+        'due_date': payload['due_date'],
       };
 
       final uri = Uri.parse('${ApiConfig.baseUrl}/utility-bill/add/');

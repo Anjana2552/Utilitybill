@@ -17,6 +17,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
 	final _service = NotificationsService();
 	List<NotificationItem> _items = [];
 	bool _loading = true;
+	String _filter = 'all'; // 'all', 'authority', 'system'
 
 	@override
 	void initState() {
@@ -52,6 +53,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
 	@override
 	Widget build(BuildContext context) {
+		// Apply filter
+		List<NotificationItem> filteredItems = _items;
+		if (_filter == 'authority') {
+			filteredItems = _items.where((n) => _isAuthorityAlertStatic(n.type)).toList();
+		} else if (_filter == 'system') {
+			filteredItems = _items.where((n) => !_isAuthorityAlertStatic(n.type)).toList();
+		}
+
 		return Scaffold(
 			appBar: AppBar(
 				title: const Text('Notifications'),
@@ -68,6 +77,37 @@ class _NotificationsPageState extends State<NotificationsPage> {
 				],
 				backgroundColor: Theme.of(context).colorScheme.primary,
 				foregroundColor: Theme.of(context).colorScheme.onPrimary,
+				bottom: PreferredSize(
+					preferredSize: const Size.fromHeight(60),
+					child: Container(
+						color: Colors.white,
+						padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+						child: Row(
+							children: [
+								_FilterChip(
+									label: 'All',
+									isSelected: _filter == 'all',
+									onTap: () => setState(() => _filter = 'all'),
+									icon: Icons.all_inbox,
+								),
+								const SizedBox(width: 8),
+								_FilterChip(
+									label: 'Authority Alerts',
+									isSelected: _filter == 'authority',
+									onTap: () => setState(() => _filter = 'authority'),
+									icon: Icons.campaign,
+								),
+								const SizedBox(width: 8),
+								_FilterChip(
+									label: 'System',
+									isSelected: _filter == 'system',
+									onTap: () => setState(() => _filter = 'system'),
+									icon: Icons.notifications,
+								),
+							],
+						),
+					),
+				),
 			),
 			body: _loading
 				? const Center(
@@ -78,19 +118,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
 				)
 				: RefreshIndicator(
 					onRefresh: _load,
-					child: _items.isEmpty
+					child: filteredItems.isEmpty
 						? ListView(
 							padding: const EdgeInsets.all(16.0),
-							children: const [_EmptyNotificationCard()],
+							children: [_EmptyNotificationCard(filter: _filter)],
 						)
 						: ListView(
 							padding: const EdgeInsets.all(16.0),
 							children: [
 									// Unread section
-									if (_items.any((e) => !e.read)) ...[
+									if (filteredItems.any((e) => !e.read)) ...[
 										const Text('Unread', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
 										const SizedBox(height: 8),
-										..._items.where((n) => !n.read).map((n) => _NotificationTile(
+										...filteredItems.where((n) => !n.read).map((n) => _NotificationTile(
 											n: n,
 											onMarkRead: () async {
 												final prefs = await SharedPreferences.getInstance();
@@ -105,12 +145,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
 									// Read section
 									const Text('Read', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
 									const SizedBox(height: 8),
-									if (_items.any((e) => e.read))
-										..._items.where((n) => n.read).map((n) => _NotificationTile(
+									if (filteredItems.any((e) => e.read))
+										...filteredItems.where((n) => n.read).map((n) => _NotificationTile(
 												n: n,
 												onMarkRead: null,
 											)),
-									if (!_items.any((e) => e.read))
+									if (!filteredItems.any((e) => e.read))
 										Card(
 											shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
 											child: const ListTile(
@@ -125,6 +165,60 @@ class _NotificationsPageState extends State<NotificationsPage> {
 		);
 	}
 
+	static bool _isAuthorityAlertStatic(String type) {
+		return type == 'alert' || type == 'urgent_alert';
+	}
+
+}
+
+class _FilterChip extends StatelessWidget {
+	final String label;
+	final bool isSelected;
+	final VoidCallback onTap;
+	final IconData icon;
+
+	const _FilterChip({
+		required this.label,
+		required this.isSelected,
+		required this.onTap,
+		required this.icon,
+	});
+
+	@override
+	Widget build(BuildContext context) {
+		return InkWell(
+			onTap: onTap,
+			borderRadius: BorderRadius.circular(20),
+			child: Container(
+				padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+				decoration: BoxDecoration(
+					color: isSelected 
+						? Theme.of(context).colorScheme.primary
+						: Colors.grey.shade200,
+					borderRadius: BorderRadius.circular(20),
+				),
+				child: Row(
+					mainAxisSize: MainAxisSize.min,
+					children: [
+						Icon(
+							icon,
+							size: 16,
+							color: isSelected ? Colors.white : Colors.grey.shade700,
+						),
+						const SizedBox(width: 4),
+						Text(
+							label,
+							style: TextStyle(
+								fontSize: 12,
+								fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+								color: isSelected ? Colors.white : Colors.grey.shade700,
+							),
+						),
+					],
+				),
+			),
+		);
+	}
 }
 
 class _NotificationTile extends StatelessWidget {
@@ -156,35 +250,133 @@ class _NotificationTile extends StatelessWidget {
         return false;
       },
       child: Card(
-        elevation: 1,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: _isAuthorityAlert(n.type) ? 3 : 1,
+        color: _isAuthorityAlert(n.type) 
+            ? (n.type == 'urgent_alert' ? Colors.red.shade50 : Colors.blue.shade50)
+            : null,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: _isAuthorityAlert(n.type)
+              ? BorderSide(
+                  color: n.type == 'urgent_alert' ? Colors.red.shade300 : Colors.blue.shade300,
+                  width: 2,
+                )
+              : BorderSide.none,
+        ),
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(_iconForType(n.type), color: Theme.of(context).colorScheme.secondary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.w400 : FontWeight.w700, fontSize: 14)),
-                        const SizedBox(height: 4),
-                        Text(n.message, style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                        const SizedBox(height: 6),
-                        Text(_formatTime(n.timestamp), style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                      ],
+              // Special header for authority alerts
+              if (_isAuthorityAlert(n.type)) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: n.type == 'urgent_alert' ? Colors.red.shade700 : Colors.blue.shade700,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        n.type == 'urgent_alert' ? Icons.warning : Icons.campaign,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        n.type == 'urgent_alert' ? 'URGENT ALERT' : 'ANNOUNCEMENT',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Authority message display - clean and prominent
+                Text(
+                  n.title.replaceAll('URGENT: ', '').replaceAll('IMPORTANT: ', '').replaceAll('INFO: ', ''),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: n.type == 'urgent_alert' ? Colors.red.shade900 : Colors.blue.shade900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    n.message,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black87,
+                      height: 1.4,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  if (!n.read)
-                    Icon(Icons.brightness_1, size: 10, color: Theme.of(context).colorScheme.secondary),
-                ],
-              ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 12, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatTime(n.timestamp),
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                    const Spacer(),
+                    if (!n.read)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade600,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'NEW',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ] else ...[
+                // Standard notification display for system messages
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(_iconForType(n.type), color: Theme.of(context).colorScheme.secondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.w400 : FontWeight.w700, fontSize: 14)),
+                          const SizedBox(height: 4),
+                          Text(n.message, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                          const SizedBox(height: 6),
+                          Text(_formatTime(n.timestamp), style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (!n.read)
+                      Icon(Icons.brightness_1, size: 10, color: Theme.of(context).colorScheme.secondary),
+                  ],
+                ),
+              ],
               // Show "Pay Now" button for overdue bills
               if (n.type == 'bill_overdue' && n.billId != null && n.billId!.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -217,6 +409,10 @@ class _NotificationTile extends StatelessWidget {
     );
   }
 
+  bool _isAuthorityAlert(String type) {
+    return type == 'alert' || type == 'urgent_alert';
+  }
+
 	IconData _iconForType(String t) {
 		switch (t) {
 			case 'bill_generated':
@@ -239,6 +435,16 @@ class _NotificationTile extends StatelessWidget {
 				return Icons.card_giftcard;
 			case 'profile_updated':
 				return Icons.person_outline;
+			case 'alert':
+				return Icons.campaign;
+			case 'urgent_alert':
+				return Icons.warning;
+			case 'budget_exceeded':
+				return Icons.money_off;
+			case 'budget_nearing':
+				return Icons.warning_amber;
+			case 'budget_within':
+				return Icons.check_circle;
 			default:
 				return Icons.notifications_none;
 		}
@@ -255,10 +461,25 @@ class _NotificationTile extends StatelessWidget {
 }
 
 class _EmptyNotificationCard extends StatelessWidget {
-	const _EmptyNotificationCard();
+	final String filter;
+	const _EmptyNotificationCard({required this.filter});
 
 	@override
 	Widget build(BuildContext context) {
+		String title;
+		String subtitle;
+		
+		if (filter == 'authority') {
+			title = 'No authority alerts';
+			subtitle = 'Announcements from utility authorities will appear here.';
+		} else if (filter == 'system') {
+			title = 'No system notifications';
+			subtitle = 'Bill updates and payment notifications will appear here.';
+		} else {
+			title = 'No notifications yet';
+			subtitle = 'You will see updates and alerts here.';
+		}
+
 		return Card(
 			elevation: 2,
 			shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -275,21 +496,21 @@ class _EmptyNotificationCard extends StatelessWidget {
 							child: Icon(Icons.notifications_none, color: Theme.of(context).colorScheme.primary),
 						),
 						const SizedBox(width: 12),
-						const Expanded(
+						Expanded(
 							child: Column(
 								crossAxisAlignment: CrossAxisAlignment.start,
 								children: [
 									Text(
-										'No notifications yet',
-										style: TextStyle(
+										title,
+										style: const TextStyle(
 											fontSize: 16,
 											fontWeight: FontWeight.w600,
 										),
 									),
-									SizedBox(height: 4),
+									const SizedBox(height: 4),
 									Text(
-										'You will see updates and alerts here.',
-										style: TextStyle(color: Colors.grey),
+										subtitle,
+										style: const TextStyle(color: Colors.grey),
 									),
 								],
 							),
